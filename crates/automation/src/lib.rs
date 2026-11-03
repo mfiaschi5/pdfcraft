@@ -44,6 +44,7 @@ use pdfcraft_platform::staging::{StagingName, staging_suffixes};
 use pdfcraft_render::{PageRenderer, PageText, RenderConfig, RenderRequest, RequestKind};
 use serde_json::{Value, json};
 
+pub use assistant::AiNetwork;
 pub use pdfcraft_render::Pixels;
 pub use tools::{ToolDef, tools};
 
@@ -92,6 +93,8 @@ pub struct Automation {
     evicted: HashSet<DocId>,
     /// The AI assistant's library, once a tool has used it.
     ai: Option<assistant::Loaded>,
+    /// What `ai_ask` sends with, when the app allowed the network ([`Automation::with_ai_network`]).
+    ai_network: Option<AiNetwork>,
 }
 
 impl Default for Automation {
@@ -111,7 +114,15 @@ impl Automation {
             listed: HashMap::new(),
             evicted: HashSet::new(),
             ai: None,
+            ai_network: None,
         }
+    }
+
+    /// Let `ai_ask` send requests through `network`. Only an app the user started with the
+    /// network allowed calls this; without it, `ai_ask` can only show what it would send.
+    pub fn with_ai_network(mut self, network: AiNetwork) -> Self {
+        self.ai_network = Some(network);
+        self
     }
 
     /// Confine every path the tools read or write to `root` (relative paths resolve inside it).

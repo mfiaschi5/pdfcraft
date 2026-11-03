@@ -8,10 +8,28 @@ use super::{CliError, stdout_line};
 // ---- automation --------------------------------------------------------------------------------
 
 pub(crate) fn automation(args: &[String]) -> Result<pdfcraft_automation::Automation, String> {
-    let a = pdfcraft_automation::Automation::new();
+    let mut a = pdfcraft_automation::Automation::new();
+    if args.iter().any(|a| a == "--allow-ai-network") {
+        a = a.with_ai_network(ai_network());
+        let _ = std::io::Write::write_fmt(
+            &mut std::io::stderr().lock(),
+            format_args!("pdfcraft-cli: AI assistant network allowed: ai_ask without dry_run sends its request to the provider\n"),
+        );
+    }
     match flag(args, "--root") {
         Some(root) => a.with_root(root).map_err(|e| format!("--root {root}: {e}")),
         None => Ok(a),
+    }
+}
+
+/// The AI assistant's transport and key, for `--allow-ai-network`: HTTPS to the provider, the key
+/// from the keychain, else `ANTHROPIC_API_KEY`.
+fn ai_network() -> pdfcraft_automation::AiNetwork {
+    use pdfcraft_platform::assistant::{HttpsTransport, Keychain, api_key};
+    let transport = HttpsTransport::new(&format!("PdfCraft/{}", env!("CARGO_PKG_VERSION")));
+    pdfcraft_automation::AiNetwork {
+        transport: std::sync::Arc::new(transport),
+        key: std::sync::Arc::new(|| api_key(&Keychain, "anthropic", |name| std::env::var(name).ok())),
     }
 }
 

@@ -297,3 +297,87 @@ fn ai_ask_leaves_out_an_earlier_copy_of_the_open_file() {
     assert!(!sent.contains("Secret") && !sent.contains("90000"), "{sent}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A transport that answers every request with `body` (fed in small pieces) and keeps the
+/// requests it was given. No network.
+struct Canned {
+    status: u16,
+    body: Vec<u8>,
+    seen: std::sync::Mutex<Vec<pdfcraft_ai::transport::HttpRequest>>,
+}
+
+impl pdfcraft_ai::transport::Transport for Canned {
+    fn post_stream(
+        &self,
+        req: &pdfcraft_ai::transport::HttpRequest,
+        on_bytes: &mut dyn FnMut(&[u8]) -> std::ops::ControlFlow<()>,
+    ) -> Result<u16, pdfcraft_ai::transport::TransportError> {
+        self.seen.lock().unwrap().push(req.clone());
+        for piece in self.body.chunks(7) {
+            if on_bytes(piece).is_break() {
+                return Err(pdfcraft_ai::transport::TransportError::Cancelled);
+            }
+        }
+        Ok(self.status)
+    }
+}
+
+fn networked(dir: &Path, status: u16, body: &str, key: Option<&'static str>) -> (Automation, Arc<Canned>) {
+    let canned = Arc::new(Canned { status, body: body.as_bytes().to_vec(), seen: Default::default() });
+    let network = pdfcraft_automation::AiNetwork { transport: canned.clone(), key: Arc::new(move || key.map(pdfcraft_ai::transport::Secret::new)) };
+    (auto(dir).with_ai_network(network), canned)
+}
+
+const CITED_ANSWER: &str = concat!(
+    "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":1}}}\n\n",
+    "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+    "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"citations_delta\",\"citation\":{\"type\":\"search_result_location\",\"cited_text\":\"Rates rose three percent.\",\"source\":\"pdfcraft-doc:i0\",\"title\":\"t\",\"search_result_index\":0,\"start_block_index\":0,\"end_block_index\":1}}}\n\n",
+    "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Rates rose 3%.\"}}\n\n",
+    "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+    "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":100}}\n\n",
+    "data: {\"type\":\"message_stop\"}\n\n",
+);
+
+#[test]
+fn ai_ask_sends_through_the_transport_it_was_given_and_reads_the_answer() {
+    let dir = workdir("send");
+    let (mut a, canned) = networked(&dir, 200, CITED_ANSWER, Some("sk-ant-test-key"));
+    let doc = ok(&mut a, "doc_open", json!({"path": "report.pdf"}))["doc"].clone();
+    let answer = ok(&mut a, "ai_ask", json!({"doc": doc, "page": 1, "question": "Why did rates rise?"}));
+    assert_eq!(answer["sent"], true);
+    assert_eq!(
+        answer["answer"],
+        json!([{"text": "Rates rose 3%.", "citations": [{"kind": "this_document", "page": 1, "quote": "Rates rose three percent."}]}])
+    );
+    assert_eq!(answer["stop_reason"], "end_turn");
+    assert_eq!(answer["usage"]["output_tokens"], 100);
+    assert_eq!(answer["cost_estimate"], "$0.0060");
+    assert!(answer["errors"].as_array().unwrap().is_empty());
+    // The key went to the transport, and the request is the one a dry run shows.
+    let seen = canned.seen.lock().unwrap();
+    assert_eq!(seen.len(), 1);
+    assert!(seen[0].headers.iter().any(|(n, v)| n == "x-api-key" && v.expose() == "sk-ant-test-key"));
+    let body: Value = serde_json::from_slice(&seen[0].body).unwrap();
+    assert!(!body.to_string().contains("Secret"), "redaction marks still hold: {body}");
+    // The key never comes back in a result.
+    assert!(!answer.to_string().contains("sk-ant-test-key"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn ai_ask_reports_provider_errors_and_a_missing_key() {
+    let dir = workdir("send-errors");
+    let error = r#"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#;
+    let (mut a, _) = networked(&dir, 401, error, Some("sk-ant-wrong"));
+    let doc = ok(&mut a, "doc_open", json!({"path": "report.pdf"}))["doc"].clone();
+    let answer = ok(&mut a, "ai_ask", json!({"doc": doc, "page": 1, "question": "Why?"}));
+    assert_eq!(answer["errors"], json!([{"kind": "authentication_error", "message": "invalid x-api-key"}]));
+    assert_eq!(answer["answer"], json!([]));
+
+    let (mut b, canned) = networked(&dir, 200, CITED_ANSWER, None);
+    let doc = ok(&mut b, "doc_open", json!({"path": "report.pdf"}))["doc"].clone();
+    let e = b.call("ai_ask", &json!({"doc": doc, "page": 1, "question": "Why?"})).unwrap_err();
+    assert!(e.to_string().contains("no API key"), "{e}");
+    assert!(canned.seen.lock().unwrap().is_empty(), "nothing is sent without a key");
+    let _ = std::fs::remove_dir_all(&dir);
+}
