@@ -155,8 +155,16 @@ transport; see the ADR "AI assistant"):
   change it need write access too.
 - **Another process.** If another process changes the file, it is read again. A change made
   while the file changed underneath it is refused rather than written over the other one.
-- **Asking.** `ai_ask {doc, page, question, rect?, k?, model?, effort?, web_search?, dry_run: true}`
-  returns the exact Claude request a question would send, with the key masked, and its passages.
+- **Asking.** `ai_ask {doc, page, question, rect?, k?, model?, effort?, web_search?, dry_run?}`.
+  - With `dry_run`, it returns the exact Claude request a question would send, with the key
+    masked, and its passages.
+  - Without it, the request is sent, but only through the transport an app gave the session
+    (`Automation::with_ai_network`). `pdfcraft-cli run` and `mcp` give one only with
+    `--allow-ai-network`, and otherwise the call is refused. The key comes from the keychain or
+    `ANTHROPIC_API_KEY`.
+  - The result holds the answer as text blocks with their citations (pages checked against the
+    document and the library), the stop reason, provider errors, usage and an estimated cost. MCP
+    marks `ai_ask` `openWorldHint`.
   It refuses documents that forbid copying, and counts the glyphs it left out under redaction
   marks. Library results leave out the document itself, and any copy of it indexed from the same
   path, which may still hold text it has since marked for redaction.

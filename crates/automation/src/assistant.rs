@@ -1,5 +1,7 @@
-//! The AI assistant's tools (M13.A5): the personal library, and `ai_ask` with `dry_run`, which
-//! returns the exact request a question would send. Nothing is sent: this build has no transport.
+//! The AI assistant's tools (M13.A5, A12): the personal library, and `ai_ask`. With `dry_run` it
+//! returns the exact request a question would send. Without it, it sends the request, but only
+//! when the app gave the session a transport ([`AiNetwork`]): `pdfcraft-cli` does that with
+//! `--allow-ai-network`, and nothing else does. Without one, nothing can be sent.
 //!
 //! A library lives in memory for the session, or in a JSON file named by `library` (inside
 //! `--root`), read on first use and rewritten atomically after each change. A file that exists
@@ -9,10 +11,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use pdfcraft_ai::claude::{self, Options, Passage, WebSearch};
+use pdfcraft_ai::event::{Event, StopReason};
 use pdfcraft_ai::library::{Added, Entry, Library, Status};
 use pdfcraft_ai::model::{self, Effort};
+use pdfcraft_ai::source::Source;
 use pdfcraft_ai::source::{Sha256, SourceId};
-use pdfcraft_ai::transport::Secret;
+use pdfcraft_ai::transport::{Secret, Transport};
 use pdfcraft_engine::assistant::{self, Selected};
 use serde_json::{Value, json};
 
@@ -20,6 +24,18 @@ use super::error::{Result, ToolError, failed};
 use super::json::Args;
 use super::paths::{read_input, write_atomic};
 use super::{Automation, DocId, file_access};
+
+/// What `ai_ask` needs to send a request: the transport, and where the API key comes from. Given
+/// to a session only by an app that the user started with the network allowed.
+#[derive(Clone)]
+pub struct AiNetwork {
+    pub transport: Arc<dyn Transport>,
+    /// The key for the provider, read when a request is sent (the keychain, then the environment).
+    pub key: Arc<dyn Fn() -> Option<Secret> + Send + Sync>,
+}
+
+/// Most of an error response kept to report it.
+const MAX_ERROR_BODY: usize = 64 * 1024;
 
 /// Files and documents one `ai_library_add` takes.
 const MAX_ADD: usize = 1_000;
@@ -244,9 +260,10 @@ impl Automation {
         if a.opt_str("library")?.is_some() {
             self.library(a, Use::Read)?;
         }
-        if !a.opt_bool("dry_run")?.unwrap_or(false) {
+        let dry_run = a.opt_bool("dry_run")?.unwrap_or(false);
+        if !dry_run && self.ai_network.is_none() {
             return Err(failed(
-                "this build sends nothing: outbound network is not enabled. Pass dry_run: true to see the exact request a question would send.",
+                "sending is off: the network is allowed only when pdfcraft-cli is started with --allow-ai-network. Pass dry_run: true to see the exact request a question would send.",
             ));
         }
         let id = self.doc(a)?.id;
@@ -286,16 +303,117 @@ impl Automation {
         let search = WebSearch { max_uses: 3, ..WebSearch::default() };
         let web = a.opt_bool("web_search")?.unwrap_or(false);
         let opts = Options { effort, web_search: web.then_some(&search), ..Options::new(model) };
-        // The preview masks the key, so the dry run needs none.
-        let request = claude::request(&opts, &Secret::new(""), &[], &turn).map_err(failed)?;
+        let sources = passages.iter().map(|p| json!({"source": source_json(&p.id), "title": p.title})).collect::<Vec<_>>();
+        if dry_run {
+            // The preview masks the key, so the dry run needs none.
+            let request = claude::request(&opts, &Secret::new(""), &[], &turn).map_err(failed)?;
+            return Ok(json!({
+                "sent": false,
+                "request": request.preview(),
+                "model": model.id,
+                "passages": sources,
+                "redacted_glyphs_left_out": ctx.redacted_glyphs,
+                "encrypted": ctx.encrypted,
+            }));
+        }
+        let network = self.ai_network.clone().ok_or_else(|| failed("sending is off"))?;
+        let key = (network.key)()
+            .ok_or_else(|| failed(format!("no API key: store one in the keychain, or set {}", pdfcraft_platform::assistant::API_KEY_ENV)))?;
+        let request = claude::request(&opts, &key, &[], &turn).map_err(failed)?;
+        let mut decoder = claude::Decoder::new(claude::sent_sources(std::slice::from_ref(&turn)));
+        let mut events = Vec::new();
+        let mut raw = Vec::new();
+        let status = network
+            .transport
+            .post_stream(&request, &mut |bytes| {
+                if raw.len() < MAX_ERROR_BODY {
+                    raw.extend_from_slice(bytes.get(..MAX_ERROR_BODY.saturating_sub(raw.len())).unwrap_or(bytes));
+                }
+                decoder.push(bytes, &mut events);
+                std::ops::ControlFlow::Continue(())
+            })
+            .map_err(failed)?;
+        if status != 200 {
+            events = vec![claude::error_event(status, &raw)];
+        } else {
+            decoder.finish(&mut events);
+        }
+        let usage = decoder.usage();
+        let pages = self.doc(a)?.info.pages.len();
+        let library = self.ai.as_ref().map(|l| &l.library);
         Ok(json!({
-            "sent": false,
-            "request": request.preview(),
+            "sent": true,
             "model": model.id,
-            "passages": passages.iter().map(|p| json!({"source": source_json(&p.id), "title": p.title})).collect::<Vec<_>>(),
+            "answer": answer_json(&events, pages, library),
+            "stop_reason": stop_json(decoder.stop_reason()),
+            "errors": events.iter().filter_map(|e| match e {
+                Event::ProviderError { kind, message } => Some(json!({"kind": kind, "message": message})),
+                _ => None,
+            }).collect::<Vec<_>>(),
+            "usage": usage,
+            "cost_estimate": model::format_dollars(model.cost_nanodollars(&usage)),
+            "prices_as_of": model::PRICES_AS_OF,
+            "passages": sources,
             "redacted_glyphs_left_out": ctx.redacted_glyphs,
-            "encrypted": ctx.encrypted,
         }))
+    }
+}
+
+/// The answer as blocks of text, each with the citations that support it. Pages are 1-based; a
+/// citation of a page the document doesn't have, or of a library document not in the library,
+/// is left out.
+fn answer_json(events: &[Event], pages: usize, library: Option<&Library>) -> Vec<Value> {
+    let mut blocks: Vec<(u64, String, Vec<Value>)> = Vec::new();
+    let block = |blocks: &mut Vec<(u64, String, Vec<Value>)>, index: u64| -> usize {
+        match blocks.iter().position(|(i, ..)| *i == index) {
+            Some(pos) => pos,
+            None => {
+                blocks.push((index, String::new(), Vec::new()));
+                blocks.len() - 1
+            }
+        }
+    };
+    for event in events {
+        match event {
+            Event::Text { block: index, text } => {
+                let pos = block(&mut blocks, *index);
+                if let Some(b) = blocks.get_mut(pos) {
+                    b.1.push_str(text);
+                }
+            }
+            Event::Citation { block: index, source } => {
+                let Some(cited) = citation_json(source, pages, library) else { continue };
+                let pos = block(&mut blocks, *index);
+                if let Some(b) = blocks.get_mut(pos) {
+                    b.2.push(cited);
+                }
+            }
+            _ => {}
+        }
+    }
+    blocks.into_iter().map(|(_, text, citations)| json!({"text": text, "citations": citations})).collect()
+}
+
+fn citation_json(source: &Source, pages: usize, library: Option<&Library>) -> Option<Value> {
+    match source {
+        Source::ThisDocument { page, quote } => {
+            (usize::try_from(*page).ok()? < pages).then(|| json!({"kind": "this_document", "page": u64::from(*page) + 1, "quote": quote}))
+        }
+        Source::Library { sha256, page, quote } => {
+            let entry = library?.entry(sha256)?;
+            (*page < entry.pages).then(|| {
+                json!({"kind": "library", "sha256": sha256.to_hex(), "title": entry.title, "paths": entry.paths, "page": u64::from(*page) + 1, "quote": quote})
+            })
+        }
+        Source::Web { url, title, quote } => Some(json!({"kind": "web", "url": url, "title": title, "quote": quote})),
+    }
+}
+
+fn stop_json(reason: Option<&StopReason>) -> Value {
+    match reason {
+        None => Value::Null,
+        Some(StopReason::Other(s)) => json!(s),
+        Some(r) => serde_json::to_value(r).unwrap_or(Value::Null),
     }
 }
 

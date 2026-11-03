@@ -1524,7 +1524,7 @@ pub fn tools() -> Vec<ToolDef> {
         t("ai_library_search", "Search the AI library", "Search the AI library offline (BM25 over passages of about 1,000 characters): the k best passages (default 6, at most 50), at most one per page, spread across documents while several match, each with sha256, title, 1-based page, text and score.")
             .ro()
             .with(schema(json!({"query":{"type":"string","minLength":1},"k":{"type":"integer","minimum":0,"maximum":50},"library":library_arg()}), &["query"])),
-        t("ai_ask", "Ask the AI assistant (dry run)", "Build the exact Claude request a question about a page or a selection would send, without sending it (this build has no network; dry_run must be true). The selection is rect (points from the top-left of the displayed page; omit for the whole page). Sent: the selection, the page's text around it, and up to k library passages (default 6; 0 for none; only when a library is in use), as cited search results, then the question. Refused for documents that forbid copying; text under unapplied redaction marks is left out and counted. Returns the request with the API key masked, the passages and their sources (1-based pages).")
+        t("ai_ask", "Ask the AI assistant", "Ask Claude about a page or a selection. With dry_run, return the exact request without sending it. Without dry_run the request is sent, but only when pdfcraft-cli was started with --allow-ai-network (otherwise refused), with the API key from the keychain or ANTHROPIC_API_KEY; the result is the answer as text blocks with their citations (this document's pages, library documents and pages, web pages; 1-based), the stop reason, provider errors, token usage and an estimated cost. The selection is rect (points from the top-left of the displayed page; omit for the whole page). Sent: the selection, the page's text around it, and up to k library passages (default 6; 0 for none; only when a library is in use), as cited search results, then the question. Refused for documents that forbid copying; text under unapplied redaction marks is left out and counted. A dry run returns the request with the API key masked, the passages and their sources (1-based pages).")
             .ro()
             .with(schema(json!({
                 "doc": doc(), "page": {"type":"integer","minimum":1}, "question": {"type":"string","minLength":1,"maxLength":32768},
@@ -1533,8 +1533,8 @@ pub fn tools() -> Vec<ToolDef> {
                 "model": {"type":"string","enum":pdfcraft_ai::model::MODELS.iter().map(|m| m.id).collect::<Vec<_>>(),"description":format!("Default {}.", pdfcraft_ai::model::default_model().id)},
                 "effort": {"type":"string","enum":["low","medium","high","xhigh","max"],"description":"Default medium."},
                 "web_search": {"type":"boolean","description":"Let the provider search the web (default false)."},
-                "dry_run": {"type":"boolean","description":"Must be true: return the request instead of sending it."},
-            }), &["doc", "page", "question", "dry_run"])),
+                "dry_run": {"type":"boolean","description":"Return the request instead of sending it."},
+            }), &["doc", "page", "question"])),
         t("render_preview", "Render a preview", "Render a PNG bounded by max_side (default 1024), without changing or saving the document. Page defaults to 1; doc may be omitted when exactly one document is open. Render warnings follow the image as page_render gives them.")
             .ro().with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"max_side":{"type":"integer","minimum":1,"maximum":4096}}), &[])),
     ]

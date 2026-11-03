@@ -9668,11 +9668,11 @@ title = "AI provider interface (local model or own endpoint), off by default"
 area = "N"
 tier = "P2"
 milestone = "M13"
-status = "planned"
+status = "partial"
 commands = []
-tools = []
-evidence = []
-notes = ""
+tools = ["ai_ask"]
+evidence = ["crates/platform/src/assistant/tests.rs::redirects_are_refused", "crates/platform/src/assistant/tests.rs::the_answer_streams_back_and_the_request_is_sent_as_built", "crates/automation/tests/it/ai_assistant.rs::ai_ask_sends_through_the_transport_it_was_given_and_reads_the_answer"]
+notes = "Headless only, Claude only. Off by default: requests are sent only when pdfcraft-cli runs with --allow-ai-network. The HTTPS transport refuses redirects, sends plain HTTP only to this computer, caps answers and times out. The key comes from the macOS keychain or ANTHROPIC_API_KEY, never a settings file. Missing: Preferences and consent in the app, keychains on Windows and Linux, the OpenAI-compatible local provider (A14)."
 
 [[feature]]
 id = "misc.ai-summary"
@@ -9692,11 +9692,11 @@ title = "Ask questions with citations to pages"
 area = "N"
 tier = "P2"
 milestone = "M13"
-status = "planned"
+status = "partial"
 commands = []
-tools = []
-evidence = []
-notes = "Not usable yet: nothing is sent (outbound network is the owner's decision). ai_ask with dry_run returns the exact Claude Messages API request: the selection, the text around it and library passages as cited search results, the question, and the key masked. Copy-forbidden documents are refused and text under unapplied redaction marks is left out. pdfcraft-ai decodes streamed answers and accepts only citations of passages that were sent. Missing: the transport, the Assistant panel and its entry points, the conversation, citation chips and jumps, image questions, consent and keys in the keychain."
+tools = ["ai_ask"]
+evidence = ["crates/automation/tests/it/ai_assistant.rs::ai_ask_sends_through_the_transport_it_was_given_and_reads_the_answer", "crates/automation/tests/it/ai_assistant.rs::ai_ask_returns_the_request_and_sends_nothing", "crates/ai/src/claude/tests.rs::citations_of_passages_not_sent_are_skipped"]
+notes = "Headless: ai_ask asks Claude about a page or a region, with the text around it and library passages as cited search results. Citations come back as this document's pages, library documents and pages, or web pages, and are accepted only for passages that were sent. Sending needs pdfcraft-cli --allow-ai-network; dry_run shows the exact request. Copy-forbidden documents are refused, and text under unapplied redaction marks is never sent. Missing: the Assistant panel and its entry points, conversations, citation chips and jumps, image questions, Save as comment."
 
 [[feature]]
 id = "misc.ai-library"

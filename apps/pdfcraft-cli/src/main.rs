@@ -89,6 +89,8 @@ pdfcraft-cli tools                                       automation tools and th
 pdfcraft-cli run    <tool> [key=value …] [--root DIR] [--out image.png]
 pdfcraft-cli run    --script steps.json [--root DIR] [--report]
                       [{\"tool\": \"doc_open\", \"args\": {…}}, …]; --report prints one JSON document for the run
+                    --allow-ai-network (run and mcp) lets ai_ask send its request to the AI provider, with
+                      the key from the keychain or ANTHROPIC_API_KEY; without it nothing is ever sent
 ",
     mcp_usage!(),
     "\

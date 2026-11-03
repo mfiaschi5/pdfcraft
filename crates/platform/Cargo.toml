@@ -9,10 +9,20 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+# The AI assistant's transport seam (`Transport`, `HttpRequest`, the URL policy, `Secret`).
+pdfcraft-ai = { workspace = true }
+thiserror = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The AI assistant's HTTPS transport. The same version and features craft-update already builds
+# (rustls with ring, the OS certificate verifier), so nothing new enters the tree.
+ureq = { version = "3.5", default-features = false, features = ["rustls-no-provider", "_ring", "gzip", "platform-verifier"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # `write_atomically`: a volume that refuses F_FULLFSYNC gets a plain fsync.
 rustix = { version = "1", features = ["fs"] }
+# The AI assistant's API key in the login keychain; already in the tree through rustls.
+security-framework = "3.7"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Already in the dependency graph through the accessibility integration. The portal watcher
