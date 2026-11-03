@@ -4563,7 +4563,11 @@ version = "0.18.0"
 dependencies = [
  "async-channel",
  "futures-lite",
+ "pdfcraft-ai",
  "rustix 1.1.5",
+ "security-framework",
+ "thiserror 2.0.21",
+ "ureq",
  "zbus",
 ]
 

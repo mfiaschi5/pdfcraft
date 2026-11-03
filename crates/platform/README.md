@@ -9,3 +9,17 @@ Synthetic tests pin both name forms, the 128-byte cut, the attempt limit and ref
 On macOS, `write_atomically_with` copies the existing regular destination's accessible extended attributes to the open staging file after writing the data and before flushing and renaming. Finder tags, comments, binary values and empty attributes therefore survive both incremental and full saves (#2658). Save As retains attributes of an existing destination; a new destination does not inherit metadata from the source PDF. Missing files and filesystems without xattr support keep working. The metadata read does not follow the destination's symlink or block on a FIFO. macOS manages the new file's `com.apple.provenance`; it is not copied. Kernel-hidden compression attributes are not requested.
 
 Attribute copying is bounded: 64 KiB of names, 1024 attributes, 16 MiB per value and 64 MiB total. Each value must fill the initially queried size and retain that size in a second query after reading: a resource fork may return a partial prefix on growth rather than an error. A read/copy error or exceeded bound returns an error suggesting Save As; the original bytes and metadata stay intact and the staging file is removed. Flush errors retain the same guarantee. Tests cover exact metadata before flush and after repeated saves, empty/binary values, oversized resource forks, a simulated partial read of a growing fork and symlink isolation. Automation covers incremental/full saves, Save As and retaining an unsaved edit after metadata refusal. The staging writer also retains Unix permissions, the Windows hidden and system attributes (the staging file is created with them, so a hidden file is never published visible and a plain one never hidden, #4593) and, where supported, Windows/macOS creation dates; attribute copying runs before the creation date is restored. ACLs and hard-link identity are not preserved.
+
+`assistant` holds the AI assistant's OS services (M13.A7). Nothing in it runs unless the user turns the assistant on and asks a question.
+
+`HttpsTransport` implements `pdfcraft_ai::transport::Transport` with `ureq` 3, using the same version, features and OS certificate verifier that craft-update already builds, so nothing new enters the tree.
+- **Policy.** It applies `check_url` before connecting (HTTPS anywhere, plain HTTP only to this computer) and follows no redirects: a 3xx is refused, so the key and the document are never sent to another address.
+- **Proxies.** A loopback address (a local model) is reached directly, never through a proxy from the environment.
+- **Limits.** Connect, first-byte and whole-answer timeouts apply. The answer is capped at 16 MiB decoded, counted after gzip, and the caller can cancel between 16 KiB pieces.
+- **Tests.** A one-shot loopback HTTP server covers a streamed answer with the request as sent, an error status with its body, a refused redirect, the cap, cancellation, a refused address and a closed port.
+
+`Keychain` keeps the API key in the macOS login keychain, as a generic password named "PdfCraft AI assistant". Other systems answer `Unavailable` for now.
+
+`SessionKeys` keeps keys in memory only, for portable mode and systems without a keychain.
+
+`api_key(store, account, env)` looks for a key in this order: the stored key, else `ANTHROPIC_API_KEY`, each checked as printable ASCII of at most 1 KiB. The key is never written to a settings file. The real keychain round trip is an `#[ignore]` test (`cargo test -p pdfcraft-platform -- --ignored`), since it changes the user's keychain.

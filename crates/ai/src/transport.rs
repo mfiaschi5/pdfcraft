@@ -139,6 +139,18 @@ pub fn check_url(url: &str) -> Result<(), TransportError> {
     Ok(())
 }
 
+/// Whether `url` is an address on this computer (a model running locally): a transport reaches
+/// it directly, never through a proxy. `false` for anything [`check_url`] refuses.
+pub fn is_local(url: &str) -> bool {
+    if check_url(url).is_err() {
+        return false;
+    }
+    let lower = url.to_ascii_lowercase();
+    let rest = lower.strip_prefix("https://").or_else(|| lower.strip_prefix("http://")).unwrap_or_default();
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    is_loopback(host_of(authority))
+}
+
 /// The host part of `authority` (lowercase already): a bracketed IPv6 address or what comes
 /// before the port.
 fn host_of(authority: &str) -> &str {
@@ -177,6 +189,16 @@ mod tests {
         assert!(!shown.contains("sk-ant-test-123"), "{shown}");
         assert_eq!(req.preview().headers[0].1, MASK);
         assert_eq!(req.preview().body, serde_json::json!({"a": 1}));
+    }
+
+    #[test]
+    fn local_addresses() {
+        for local in ["http://localhost:11434/v1", "https://127.0.0.1/x", "http://[::1]:8080"] {
+            assert!(is_local(local), "{local}");
+        }
+        for remote in ["https://api.anthropic.com/v1/messages", "http://localhost@evil.example/", "http://ollama.localhost/", "ftp://localhost/"] {
+            assert!(!is_local(remote), "{remote}");
+        }
     }
 
     #[test]
