@@ -308,6 +308,7 @@ Estimates unchanged.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-04 | patch | M10 #6121: Copy Image and image export decode JPEG 2000 pictures to PNG (colour space, palette, own opacity) |
 | 2026-11-03 | patch | M5 #5850 review: indirect typewriter intent and composer edits preserve outer whitespace; movement regression commits by outside click; estimates unchanged. |
 | 2026-11-03 | patch | M5 #5850: Enter adds Fill & Sign line breaks; outside clicks commit, Escape cancels, and saved multiline appearances retain their text and height; estimates unchanged. |
 | 2026-11-02 | patch | M10 #5743: macOS print jobs carry the job name and owner some vendors' filters need; not yet checked on a physical printer |
