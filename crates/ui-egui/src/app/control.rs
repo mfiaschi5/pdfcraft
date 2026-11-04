@@ -117,6 +117,7 @@ impl PdfCraftApp {
                     "background" => Some(Dialog::Marks(pdfcraft_engine::MarkKind::Background)),
                     "export-image" => Some(Dialog::Export(export_ui::ExportKind::Image)),
                     "word-count" => Some(Dialog::WordCount),
+                    "save-to-drive" => Some(Dialog::SaveToDrive),
                     "export-text" => Some(Dialog::Export(export_ui::ExportKind::Text)),
                     "export-all-images" => Some(Dialog::Export(export_ui::ExportKind::AllImages)),
                     "accessibility-options" => Some(Dialog::AccessibilityOptions),

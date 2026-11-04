@@ -192,6 +192,8 @@ pub enum Dialog {
     CertificateViewer,
     /// Pin tools to Home: selection modal.
     PinTool,
+    /// File ▸ Save to Google Drive (desktop only).
+    SaveToDrive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

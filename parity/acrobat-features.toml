@@ -9723,6 +9723,18 @@ evidence = ["crates/automation/tests/it/ai_assistant.rs::concept_maps_are_built_
 notes = "Beyond Acrobat. While reading, the Concept map panel (a rail button) sits beside the document: Add the selection (⇧⌘M) puts the snippet on the map and opens it there, ready to connect to a node found by its words, with the kind and strength chosen, in one click and without leaving the page; the node's connections lead on to their sources, and the panel lists what is on the map from the page being read. View ▸ Concept map (or Whole map) shows the whole map in the document area. Add to map (the selection bar) and Add Image to Map (a picture's menu) take a snippet with its document, page and quote, following the assistant's rules (nothing from a copy-forbidden document, nothing under unapplied redaction marks); notes and concepts are typed in. Nine kinds of connection (supports, contradicts, is an example of…) plus the user's own, each weak, medium or strong. A node's source opens its document at the page, by its SHA-256 even after the file moved. Drag to arrange or connect, Tidy up (force-directed), its own undo, export to JSON Canvas (Obsidian) and GraphML; headless also import from JSON Canvas. Maps are .pdfmap.json files in the app's data folder, written atomically. Missing: pictures drawn on the map (shown by their description), editing a node's text in place, renaming a kind, search, keyboard navigation between nodes, more than one map open at once."
 
 [[feature]]
+id = "misc.drive-save"
+title = "Save to Google Drive, into a folder chosen in the app"
+area = "N"
+tier = "P3"
+milestone = "M13"
+status = "partial"
+commands = ["file.save_to_drive"]
+tools = []
+evidence = ["crates/ui-egui/tests/it/drive.rs::a_document_is_saved_into_a_drive_folder_and_the_folder_is_remembered", "crates/ui-egui/tests/it/drive.rs::names_that_could_leave_the_folder_are_refused", "crates/ui-egui/tests/it/drive.rs::without_drive_or_permission_the_dialog_says_what_to_do", "crates/platform/src/drive/tests.rs::accounts_and_their_places_are_found_where_drive_for_desktop_keeps_them"]
+notes = "Beyond Acrobat (which saves to its own cloud). File ▸ Save to Google Drive… lists the Google accounts that Google Drive for desktop syncs on this computer, opens in My Drive (named in the system's language) or in the folder last saved to, goes into folders and makes new ones, and saves the document there as Save As would; Drive uploads it. PdfCraft never signs in to Google and adds no network code. Names that could leave the folder or break a synced copy are refused. When macOS hasn't yet allowed PdfCraft to read a Drive, the dialog says how to allow it and offers the system's own Save dialog in that folder. Missing: Windows (Drive's drive letter is looked for but not tried on a Windows machine), opening from Drive inside the app (the system's Open dialog reaches it), files that are online-only (opened through the system), the web build, and a headless automation tool."
+
+[[feature]]
 id = "misc.ai-graph-edit"
 title = "The AI assistant edits a concept map on request, as a proposal the user reviews"
 area = "N"

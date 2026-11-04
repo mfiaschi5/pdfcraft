@@ -118,6 +118,7 @@ const FILE: &[&str] = &[
     SEP,
     "file.save",
     "file.save_as",
+    "file.save_to_drive",
     "file.revert",
     SEP,
     "file.close",

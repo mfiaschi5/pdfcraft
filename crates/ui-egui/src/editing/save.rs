@@ -136,6 +136,13 @@ impl PdfCraftApp {
         saved
     }
 
+    /// Save document `id` to `dest` as Save As does (a clean copy; asking first if `dest` is its
+    /// own file and that changed on disk), then `after`. Returns `true` if written now.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn save_doc_as(&mut self, id: pdfcraft_engine::DocId, dest: &std::path::Path, after: impl FnOnce(&mut Self) + Send + 'static) -> bool {
+        self.save_doc_to_then(id, &dest.to_string_lossy(), SaveTarget::As, Box::new(after))
+    }
+
     /// The dialog's Save anyway: write over the changed file.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn overwrite_changed_file(&mut self) {

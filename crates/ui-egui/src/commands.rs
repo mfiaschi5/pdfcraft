@@ -200,6 +200,10 @@ impl PdfCraftApp {
             "file.save_as" => {
                 self.save_active(SaveTarget::As);
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            "file.save_to_drive" => self.open_save_to_drive(),
+            #[cfg(target_arch = "wasm32")]
+            "file.save_to_drive" => self.notify_tr("Saving to Google Drive needs the desktop app, with Google Drive for desktop."),
             "file.close" => {
                 if let Some(i) = active {
                     self.request_close_tab(i);

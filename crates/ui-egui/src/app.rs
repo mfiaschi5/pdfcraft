@@ -207,6 +207,8 @@ impl PdfCraftApp {
             assistant: Default::default(),
             ai_service: None,
             maps: Default::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            drive: Default::default(),
             js_console: Default::default(),
             doc_js: Default::default(),
             a11y: a11y_ui::A11yState::default(),

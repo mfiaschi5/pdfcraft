@@ -3038,3 +3038,26 @@ certificate	SHA-256 digest	Impronta SHA-256
 	To sign in, paste the command into Terminal and follow it in your browser. Web search isn't available this way.	Per accedere, incolla il comando nel Terminale e segui i passaggi nel browser. In questo modo la ricerca web non è disponibile.
 	For your own use: Anthropic asks apps to use API keys, and lets you sign in to the unmodified Claude Code program with your own subscription. PdfCraft runs that program, with its tools and add-ons turned off, and never reads its sign-in.	Solo per uso personale: Anthropic chiede alle app di usare le chiavi API e ti consente di accedere al programma Claude Code originale con il tuo abbonamento. PdfCraft avvia quel programma, con strumenti ed estensioni disattivati, e non legge mai le sue credenziali.
 	Sign-in command copied	Comando di accesso copiato
+	A name can't contain {c}.	Un nome non può contenere {c}.
+	Couldn't make the folder: {e}	Impossibile creare la cartella: {e}
+	Couldn't open this folder: {e}	Impossibile aprire questa cartella: {e}
+	Folder name	Nome della cartella
+	Google Drive	Google Drive
+	Google Drive for desktop isn't set up on this computer. Install it and sign in to your Google account; its folders then show here, and what you save in them is uploaded.	Google Drive per desktop non è configurato su questo computer. Installalo e accedi con il tuo account Google: le sue cartelle compariranno qui e ciò che salvi al loro interno verrà caricato.
+	Loading…	Caricamento…
+	New folder	Nuova cartella
+	No folders here	Nessuna cartella qui
+	Other location…	Altra posizione…
+	PdfCraft isn't allowed to open this Drive yet. Allow it when macOS asks, or in System Settings > Privacy & Security > Files and Folders; or use Other location… to choose the folder in the system's dialog.	PdfCraft non ha ancora il permesso di aprire questo Drive. Consentilo quando macOS lo chiede, oppure in Impostazioni di Sistema > Privacy e sicurezza > File e cartelle; o usa Altra posizione… per scegliere la cartella nella finestra di sistema.
+	Save to Google Drive	Salva su Google Drive
+	That name can't be used for a file in Drive.	Questo nome non si può usare per un file su Drive.
+	That name is too long.	Questo nome è troppo lungo.
+	There is already a folder with that name.	Esiste già una cartella con questo nome.
+	This folder isn't there any more.	Questa cartella non esiste più.
+	Try again	Riprova
+	Type a name.	Scrivi un nome.
+	couldn't start listing the folder	impossibile avviare l'elenco della cartella
+	listing stopped unexpectedly	l'elenco si è interrotto inaspettatamente
+	{name} is already in this folder. Replace it?	{name} è già in questa cartella. Vuoi sostituirlo?
+	Save to Google Drive…	Salva su Google Drive…
+	Saving to Google Drive needs the desktop app, with Google Drive for desktop.	Il salvataggio su Google Drive richiede l'app desktop e Google Drive per desktop.
