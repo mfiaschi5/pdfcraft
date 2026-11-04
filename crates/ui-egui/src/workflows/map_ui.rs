@@ -83,6 +83,8 @@ pub struct MapState {
     /// Connections weaker than this are hidden.
     pub min_strength: Strength,
     pub note_draft: String,
+    /// The panel's search for a node to connect to.
+    pub filter: String,
     /// A kind of connection of the user's own, being named.
     pub kind_draft: String,
     pub kind_directed: bool,
@@ -117,6 +119,7 @@ impl Default for MapState {
             new_strength: Strength::Medium,
             min_strength: Strength::Weak,
             note_draft: String::new(),
+            filter: String::new(),
             kind_draft: String::new(),
             kind_directed: true,
             request: String::new(),
@@ -316,7 +319,14 @@ impl PdfCraftApp {
         }
     }
 
-    fn added_to_map(&mut self) {
+    /// After a snippet went on the map: it is the node to connect next, in the map's panel beside
+    /// the document (or the workspace, when that shows).
+    fn added_to_map(&mut self, id: NodeId) {
+        self.maps.picked = Some(Picked::Node(id));
+        self.maps.filter.clear();
+        if !self.maps.open {
+            self.choose_right_panel(Some(crate::RightPanel::Map));
+        }
         let name = self.maps.graph.title.clone();
         self.notify_fmt("Added to the map “{map}”", &[("map", &name)]);
     }
@@ -347,10 +357,13 @@ impl PdfCraftApp {
         };
         let anchor = self.anchor_for(id, page, rect, &text);
         let at = self.free_spot();
-        if self
-            .change_map("Add snippet", |g| g.add_node(Content::Text { text }, Some(anchor), at, Author::User).map(|_| ()).map_err(|e| e.to_string()))
-        {
-            self.added_to_map();
+        let mut added = None;
+        self.change_map("Add snippet", |g| {
+            added = Some(g.add_node(Content::Text { text }, Some(anchor), at, Author::User).map_err(|e| e.to_string())?);
+            Ok(())
+        });
+        if let Some(node) = added {
+            self.added_to_map(node);
         }
     }
 
@@ -374,19 +387,31 @@ impl PdfCraftApp {
         let anchor = self.anchor_for(id, page, None, "");
         let at = self.free_spot();
         let content = Content::Image { image: ImageBytes(Arc::new(bytes)), alt: capped(&alt, pdfcraft_graph::MAX_LABEL_BYTES) };
-        if self.change_map("Add picture", |g| g.add_node(content, Some(anchor), at, Author::User).map(|_| ()).map_err(|e| e.to_string())) {
-            self.added_to_map();
+        let mut added = None;
+        self.change_map("Add picture", |g| {
+            added = Some(g.add_node(content, Some(anchor), at, Author::User).map_err(|e| e.to_string())?);
+            Ok(())
+        });
+        if let Some(node) = added {
+            self.added_to_map(node);
         }
     }
 
-    /// Open a node's source: the open document with its bytes, else the file at its last path.
+    /// Open a node's source: the open document with its bytes, else the one open from its path
+    /// (changed since, by an edit), else the file at its last path.
     fn open_anchor(&mut self, anchor: &Anchor) {
         let Some(sha) = Sha256::from_hex(&anchor.sha256) else {
             self.notify_tr("This snippet's document isn't known.");
             return;
         };
         let page = usize::try_from(anchor.page).unwrap_or(usize::MAX);
-        if let Some(i) = self.views.iter().position(|v| self.session.document_sha256(v.id) == Some(sha)) {
+        let same_bytes = self.views.iter().position(|v| self.session.document_sha256(v.id) == Some(sha));
+        let same_file = || {
+            self.views
+                .iter()
+                .position(|v| self.session.get(v.id).and_then(|d| d.path.as_deref()).is_some_and(|p| anchor.paths.iter().any(|a| a == p)))
+        };
+        if let Some(i) = same_bytes.or_else(same_file) {
             self.maps.open = false;
             self.active = Some(i);
             if let Some(view) = self.views.get_mut(i)
@@ -423,9 +448,12 @@ impl PdfCraftApp {
             self.notify_tr("Ask a first question in the AI assistant panel to allow requests, then try again.");
             return;
         }
-        let Some(key) = service.key() else {
-            self.notify_tr("No API key yet: add one in Preferences ▸ AI assistant.");
-            return;
+        let (transport, key) = match service.route(&self.assistant.prefs) {
+            Ok(route) => route,
+            Err(e) => {
+                self.notify(e);
+                return;
+            }
         };
         let request = self.maps.request.trim().to_owned();
         if request.is_empty() {
@@ -454,7 +482,6 @@ impl PdfCraftApp {
         let graph = self.maps.graph.clone();
         let model = self.assistant.prefs.model();
         let effort = self.assistant.prefs.effort;
-        let transport = service.transport.clone();
         let cancel = Arc::new(AtomicBool::new(false));
         let stop = cancel.clone();
         let (tx, rx) = mpsc::channel();
@@ -596,13 +623,13 @@ impl PdfCraftApp {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Export {
+pub(crate) enum Export {
     Canvas,
     GraphMl,
 }
 
-/// What the workspace asks the app to do, after drawing.
-enum Action {
+/// What the workspace and the panel ask the app to do, after drawing.
+pub(crate) enum Action {
     Close,
     New,
     Load(PathBuf),
@@ -624,6 +651,13 @@ enum Action {
     StopAsk,
     ApplyReview,
     DiscardReview,
+    /// The panel: make this node the one to connect from.
+    Focus(NodeId),
+    Unfocus,
+    /// The panel: show the whole map.
+    OpenWhole,
+    /// The panel: add the document's selection.
+    AddSelection,
 }
 
 /// The map workspace, in the document area.
@@ -932,7 +966,7 @@ fn canvas(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, actions: &mut Vec<
     let mut boxes: Vec<NodeBox> = Vec::with_capacity(maps.graph.nodes().len());
     for n in maps.graph.nodes() {
         let text = match &n.content {
-            Content::Image { alt, .. } => format!("🖼 {alt}"),
+            Content::Image { alt, .. } => crate::i18n::fmt(tl!("Picture: {alt}"), &[("alt", alt)]),
             Content::Concept { label } => label.clone(),
             other => capped(other.text(), 280),
         };
@@ -1184,6 +1218,166 @@ fn run(app: &mut PdfCraftApp, action: Action) {
         }
         Action::ApplyReview => app.apply_review(),
         Action::DiscardReview => app.maps.review = None,
+        Action::Focus(id) => {
+            app.maps.picked = Some(Picked::Node(id));
+            app.maps.filter.clear();
+        }
+        Action::Unfocus => app.maps.picked = None,
+        Action::OpenWhole => app.open_map_workspace(),
+        Action::AddSelection => {
+            if let Some(i) = app.active {
+                app.add_selection_to_map(i);
+            }
+        }
+    }
+}
+
+/// The document the map's panel sits beside: what its snippets are matched against.
+pub(crate) struct Here {
+    pub sha256: Option<String>,
+    pub path: Option<String>,
+    pub page: usize,
+    /// The document has a selection that may be copied.
+    pub can_add: bool,
+}
+
+impl Here {
+    fn holds(&self, a: &Anchor) -> bool {
+        self.sha256.as_deref() == Some(a.sha256.as_str()) || self.path.as_deref().is_some_and(|p| a.paths.iter().any(|q| q == p))
+    }
+}
+
+/// Nodes listed to connect to, at most.
+const PANEL_MATCHES: usize = 20;
+
+/// The map beside the document, for reading: add the selection, connect the node just added
+/// (or chosen) to others without leaving the page, follow its connections, and see what is on
+/// the map from this page.
+pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, here: &Here) -> Vec<Action> {
+    let mut actions = Vec::new();
+    if !maps.available() {
+        ui.label(egui::RichText::new(tl!("Concept maps need the desktop app")).color(t.text_muted));
+        return actions;
+    }
+    ui.horizontal_wrapped(|ui| {
+        ui.label(egui::RichText::new(&maps.graph.title).font(theme::semibold(13.0)));
+        if ui.small_button(tl!("Whole map")).on_hover_text(tl!("Show the whole map instead of the document")).clicked() {
+            actions.push(Action::OpenWhole);
+        }
+        let undo = maps.history.undo_label().map(|l| crate::i18n::fmt(tl!("Undo {what}"), &[("what", tl!(l))]));
+        if let Some(undo) = undo
+            && ui.small_button(tl!("Undo")).on_hover_text(undo).clicked()
+        {
+            actions.push(Action::Undo);
+        }
+    });
+    let tip = crate::commands::command_tip(ui.ctx(), tl!("Add the selected text to the map ({key})"), "map.add_selection");
+    if ui.add_enabled(here.can_add, egui::Button::new(tl!("Add the selection"))).on_hover_text(tip).clicked() {
+        actions.push(Action::AddSelection);
+    }
+    if !here.can_add {
+        hint(ui, t, tl!("Select text to add it, or right-click a picture."));
+    }
+    ui.separator();
+    match maps.picked {
+        Some(Picked::Node(id)) if maps.graph.node(id).is_some() => focus_ui(ui, t, maps, id, &mut actions),
+        _ => hint(ui, t, tl!("Add a snippet, or pick a node below, to connect it to others.")),
+    }
+    ui.separator();
+    heading(ui, tl!("On the map from this page"));
+    let mut any = false;
+    for n in maps
+        .graph
+        .nodes()
+        .iter()
+        .filter(|n| n.anchor.as_ref().is_some_and(|a| here.holds(a) && usize::try_from(a.page).is_ok_and(|p| p == here.page)))
+    {
+        any = true;
+        let picked = maps.picked == Some(Picked::Node(n.id));
+        if ui.selectable_label(picked, capped(n.content.text(), 70)).clicked() {
+            actions.push(Action::Focus(n.id));
+        }
+    }
+    if !any {
+        hint(ui, t, tl!("Nothing yet."));
+    }
+    actions
+}
+
+/// The node to connect from: its text and source, its connections (each opens the other end's
+/// source), and the nodes it can be connected to, found by their words.
+fn focus_ui(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, id: NodeId, actions: &mut Vec<Action>) {
+    let Some(n) = maps.graph.node(id).cloned() else { return };
+    ui.horizontal(|ui| {
+        heading(ui, tl!("Connect"));
+        if ui.small_button(tl!("Done")).on_hover_text(tl!("Stop connecting this node")).clicked() {
+            actions.push(Action::Unfocus);
+        }
+    });
+    ui.label(egui::RichText::new(prefix(n.content.text(), 300)).small());
+    if let Some(a) = &n.anchor
+        && ui.small_button(source_label(a)).on_hover_text(tl!("Go to the source")).clicked()
+    {
+        actions.push(Action::OpenSource(a.clone()));
+    }
+    let name = |g: &Graph, other: NodeId| g.node(other).map(|o| capped(o.content.text(), 50)).unwrap_or_default();
+    for e in maps.graph.edges().iter().filter(|e| e.from == id || e.to == id) {
+        let other = if e.from == id { e.to } else { e.from };
+        let kind = maps.graph.kind(e.kind).map_or("", |k| tl!(&k.name));
+        let arrow = if e.from == id { "→" } else { "←" };
+        let label = format!("{arrow} {kind} ({}) · {}", strength_name(e.strength), name(&maps.graph, other));
+        let response = ui.selectable_label(false, egui::RichText::new(label).small());
+        if response.clicked() {
+            actions.push(Action::Focus(other));
+            if let Some(a) = maps.graph.node(other).and_then(|o| o.anchor.clone()) {
+                actions.push(Action::OpenSource(a));
+            }
+        }
+    }
+    ui.horizontal_wrapped(|ui| {
+        let kind_name = maps.graph.kind(maps.new_kind).map(|k| k.name.clone()).unwrap_or_default();
+        craft_ui::ComboBox::from_id_salt("map-panel-kind").selected_text(tl!(&kind_name)).width(130.0).show_ui(ui, |ui| {
+            for k in maps.graph.kinds() {
+                ui.selectable_value(&mut maps.new_kind, k.id, tl!(&k.name));
+            }
+        });
+        craft_ui::ComboBox::from_id_salt("map-panel-strength").selected_text(strength_name(maps.new_strength)).width(80.0).show_ui(ui, |ui| {
+            for s in STRENGTHS {
+                ui.selectable_value(&mut maps.new_strength, s, strength_name(s));
+            }
+        });
+    });
+    ui.add(crate::widgets::line(&mut maps.filter).hint_text(tl!("Find a node to connect to")).desired_width(f32::INFINITY).char_limit(200));
+    let words: Vec<String> = maps.filter.split_whitespace().map(str::to_lowercase).collect();
+    let connected: HashSet<NodeId> =
+        maps.graph.edges().iter().filter(|e| e.from == id || e.to == id).map(|e| if e.from == id { e.to } else { e.from }).collect();
+    let mut shown = 0;
+    for other in maps.graph.nodes().iter().rev() {
+        if shown >= PANEL_MATCHES {
+            break;
+        }
+        if other.id == id || connected.contains(&other.id) {
+            continue;
+        }
+        let text = other.content.text().to_lowercase();
+        if !words.iter().all(|w| text.contains(w.as_str())) {
+            continue;
+        }
+        shown += 1;
+        let label = crate::i18n::fmt(tl!("Connect to: {node}"), &[("node", &capped(other.content.text(), 60))]);
+        if ui.selectable_label(false, egui::RichText::new(label).small()).clicked() {
+            actions.push(Action::Connect(id, other.id));
+        }
+    }
+    if shown == 0 {
+        hint(ui, t, if words.is_empty() { tl!("Nothing else on the map yet.") } else { tl!("No node has those words.") });
+    }
+}
+
+/// Run what the panel asked for, once the panel is drawn.
+pub(crate) fn run_panel(app: &mut PdfCraftApp, actions: Vec<Action>) {
+    for action in actions {
+        run(app, action);
     }
 }
 

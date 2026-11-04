@@ -51,7 +51,7 @@ fn harness(dir: Option<PathBuf>, transport: Option<Arc<Queue>>) -> Harness<'stat
         if let Some(transport) = transport {
             let keys = Arc::new(SessionKeys::default());
             keys.set("anthropic", &Secret::new("sk-ant-ui-test")).unwrap();
-            app.ai_service = Some(AiService { transport, keys, env_key: Arc::new(|| None) });
+            app.ai_service = Some(AiService { transport, keys, env_key: Arc::new(|| None), claude_code: None });
             app.assistant.prefs.enabled = true;
             app.assistant.prefs.consented = true;
             // Never the user's own library.
@@ -107,9 +107,14 @@ fn a_selection_goes_on_the_map_with_its_page_and_opens_it_again() {
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(saved.nodes(), &nodes[..]);
     // From the map, the source opens the document at its page.
+    assert_eq!(h.state().right, Some(pdfcraft_ui_egui::RightPanel::Map), "the map's panel opens beside the document");
+    h.state_mut().choose_right_panel(None);
     h.state_mut().views[0].go_to_page(1);
     open_map(&mut h);
-    h.get_by_label(text.as_str()).click();
+    h.state_mut().maps.picked = None;
+    h.run_steps(2);
+    // The node on the canvas (a button), not its text in the side panel.
+    h.get_by(|n| n.role() == egui::accesskit::Role::Button && n.label().as_deref() == Some(text.as_str())).click();
     h.run_steps(2);
     assert_eq!(h.state().maps.picked, Some(MapPicked::Node(nodes[0].id)));
     h.get_by_label("Open rates.pdf, p. 1").click();
@@ -303,5 +308,52 @@ fn a_map_saved_earlier_takes_the_next_snippet_and_an_unreadable_one_is_never_wri
     h.get_by_label("Add note").click();
     h.run_steps(2);
     assert_eq!(std::fs::read(&file).unwrap(), b"{ not a map");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn while_reading_a_snippet_is_added_and_connected_from_the_panel_without_leaving_the_page() {
+    let dir = map_dir("reading");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut earlier = Graph::new("My map");
+    let inflation = earlier.add_node(Content::Concept { label: "Inflation".into() }, None, [0.0, 0.0], Author::User).unwrap();
+    earlier.add_node(Content::Note { text: "Unrelated note".into() }, None, [300.0, 0.0], Author::User).unwrap();
+    std::fs::write(dir.join("My map.pdfmap.json"), earlier.to_json().unwrap()).unwrap();
+    let mut h = harness(Some(dir.clone()), None);
+    // The rail offers the map beside the document.
+    h.state_mut().choose_right_panel(None);
+    h.run_steps(2);
+    h.get_by_label("Concept map").click();
+    h.run_steps(2);
+    assert_eq!(h.state().right, Some(pdfcraft_ui_egui::RightPanel::Map));
+    // ⌘⇧M adds the selection; the panel shows it, ready to connect.
+    h.state_mut().views[0].select_text(0, 0, 4);
+    assert!(support::step_until(&mut h, |h| h.query_by_label("Add to map").is_some()), "the page's text has arrived");
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::M);
+    h.run_steps(3);
+    let graph = h.state().maps.graph.clone();
+    assert_eq!(graph.nodes().len(), 3, "toast: {}", toast(&h));
+    let snippet = graph.nodes()[2].id;
+    assert_eq!(h.state().maps.picked, Some(MapPicked::Node(snippet)));
+    assert!(!h.state().maps.open, "the document stays in view");
+    assert!(h.query_by_label_contains("On the map from this page").is_some());
+    // Find the concept by a word and connect to it with one click.
+    h.state_mut().maps.filter = "infl".into();
+    h.run_steps(2);
+    assert!(h.query_by_label("Connect to: Unrelated note").is_none(), "the search keeps to its words");
+    h.get_by_label("Connect to: Inflation").click();
+    h.run_steps(2);
+    let edges = h.state().maps.graph.edges().to_vec();
+    assert_eq!(edges.len(), 1);
+    assert_eq!((edges[0].from, edges[0].to), (snippet, inflation));
+    assert_eq!(h.state().maps.graph.kind(edges[0].kind).map(|k| k.name.clone()).as_deref(), Some("is related to"));
+    let (saved, _) = Graph::from_json(&std::fs::read(dir.join("My map.pdfmap.json")).unwrap()).unwrap();
+    assert_eq!(saved.edges().len(), 1, "saved at once");
+    assert_eq!(h.state().views[0].current, 0);
+    assert!(!h.state().maps.open);
+    // The connection leads on to the other node.
+    h.get_by_label_contains("is related to (Medium) · Inflation").click();
+    h.run_steps(2);
+    assert_eq!(h.state().maps.picked, Some(MapPicked::Node(inflation)));
     let _ = std::fs::remove_dir_all(&dir);
 }

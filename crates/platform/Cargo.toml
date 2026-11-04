@@ -32,6 +32,7 @@ async-channel = "2"
 futures-lite = "2"
 
 [dev-dependencies]
+serde_json = { workspace = true }
 # Exercise the actual portal wire decoder and cancellable worker on every native test host.
 zbus = { version = "=5.19.0", default-features = false, features = ["async-io"] }
 async-channel = "2"

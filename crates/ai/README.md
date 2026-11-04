@@ -55,7 +55,27 @@ trait Transport { fn post_stream(&self, &HttpRequest, on_bytes) -> Result<u16, T
 check_url(url)      // https anywhere, http only to localhost / 127.0.0.0/8 / ::1; no user info
 Secret              // Debug prints a mask; no Display or Serialize
 HttpRequest::preview() -> RequestPreview   // secret headers masked
+
+// Claude Code on the user's subscription (claude_code.rs), personal use
+invocation(body) -> Invocation { args, stdin, reply }   // ARGS lock it down; CLEARED_ENV
+Invocation::translator() -> Translator; Translator::line(l) / finish(why) -> SSE bytes
+sign_in(auth_status_json) -> SignIn { method, email }
 ```
+
+**Claude Code.** Instead of an API key, the request can go through the user's own, unmodified
+`claude` program, signed in with their Claude subscription, for their own use (Anthropic asks
+products to use API keys, and lets people sign in to the unmodified program with their own
+subscription). [`claude_code`] turns the request built here into the program's arguments and one
+stream-json message, and its output back into the API's events, so `send` reads it unchanged:
+- it runs with `--safe-mode --tools ""`, no slash commands, no saved session and the request's
+  own system prompt in place of Claude Code's, so a PDF's text can't make it run or read anything;
+- passages go as numbered text, cited as `[n]`; a marker becomes a citation only of a passage
+  sent, but the quoted words aren't checked as the API checks them;
+- a request with tools asks for one JSON reply, turned into tool calls, with each passage headed
+  by its source id (a map snippet names the one it quotes) instead of a number. The follow-up
+  with their results is answered without running the program again, unless a call was refused:
+  then it runs again, told which calls were refused and why, to correct them;
+- web search, thinking and refusal fallbacks don't carry over.
 
 ## What is sent
 

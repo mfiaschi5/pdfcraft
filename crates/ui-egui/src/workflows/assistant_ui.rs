@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 
 use pdfcraft_ai::claude::{self, Message, Options, Passage, Reply, WebSearch};
+use pdfcraft_ai::claude_code::SignIn;
 use pdfcraft_ai::event::{Event, StopReason};
 use pdfcraft_ai::library::Library;
 use pdfcraft_ai::model::{self, Effort, Usage};
@@ -41,18 +42,60 @@ const MAX_TURNS: usize = 50;
 const LIBRARY_PASSAGES: usize = pdfcraft_ai::library::DEFAULT_RESULTS;
 
 /// What the app binary gives the assistant: the transport, the key store, and the key from the
-/// environment. The desktop app builds it; the web build and most tests have none.
+/// environment, and Claude Code when it is installed. The desktop app builds it; the web build and
+/// most tests have none.
 #[derive(Clone)]
 pub struct AiService {
     pub transport: Arc<dyn Transport>,
     pub keys: Arc<dyn SecretStore>,
     pub env_key: Arc<dyn Fn() -> Option<Secret> + Send + Sync>,
+    pub claude_code: Option<ClaudeCodeLink>,
 }
+
+/// Claude Code on this computer: the user's own `claude` program, signed in with their Claude
+/// subscription (personal use; `pdfcraft_ai::claude_code`).
+#[derive(Clone)]
+pub struct ClaudeCodeLink {
+    pub transport: Arc<dyn Transport>,
+    /// Where the program is, shown in Preferences.
+    pub program: String,
+    /// Ask the program how it is signed in. It runs the program, so not on the UI thread.
+    pub sign_in: Arc<dyn Fn() -> Result<SignIn, String> + Send + Sync>,
+}
+
+/// How requests reach Claude.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Provider {
+    /// The Claude API, with the user's API key.
+    #[default]
+    ApiKey,
+    /// The user's own Claude Code, on their Claude subscription.
+    ClaudeCode,
+}
+
+/// Built into requests sent through Claude Code, which sends no key (the request needs one).
+const NO_KEY: &str = "claude-code";
 
 impl AiService {
     /// The key to send with: the stored one, else the environment's.
     pub(crate) fn key(&self) -> Option<Secret> {
         pdfcraft_platform::assistant::api_key(self.keys.as_ref(), ACCOUNT, |_| (self.env_key)().map(|k| k.expose().to_owned()))
+    }
+
+    /// The way to Claude the preferences choose: its transport, and the key to build requests
+    /// with (Claude Code sends none).
+    pub(crate) fn route(&self, prefs: &AssistantPrefs) -> Result<(Arc<dyn Transport>, Secret), String> {
+        match prefs.provider {
+            Provider::ApiKey => {
+                let key = self.key().ok_or_else(|| tl!("No API key yet: add one in Preferences ▸ AI assistant.").to_owned())?;
+                Ok((self.transport.clone(), key))
+            }
+            Provider::ClaudeCode => match &self.claude_code {
+                Some(c) => Ok((c.transport.clone(), Secret::new(NO_KEY))),
+                None => Err(tl!("Claude Code isn't installed on this computer.").to_owned()),
+            },
+        }
     }
 }
 
@@ -68,6 +111,7 @@ pub struct AssistantPrefs {
     pub preview: bool,
     /// The user allowed requests to this provider (asked once).
     pub consented: bool,
+    pub provider: Provider,
 }
 
 impl Default for AssistantPrefs {
@@ -79,6 +123,7 @@ impl Default for AssistantPrefs {
             web_search: false,
             preview: true,
             consented: false,
+            provider: Provider::ApiKey,
         }
     }
 }
@@ -119,6 +164,8 @@ pub struct Turn {
     pub errors: Vec<String>,
     pub searches: Vec<String>,
     pub model: &'static model::Model,
+    /// Answered through Claude Code, on the user's plan: no cost to show.
+    pub on_plan: bool,
 }
 
 impl Turn {
@@ -147,6 +194,7 @@ pub struct Prepared {
     pub redacted: usize,
     pub encrypted: bool,
     model: &'static model::Model,
+    provider: Provider,
 }
 
 enum WorkerMsg {
@@ -181,6 +229,9 @@ pub struct AssistantState {
     running: Option<Running>,
     pub key_draft: String,
     pub key_status: Option<KeyStatus>,
+    /// What Claude Code said when last asked how it is signed in.
+    pub claude_sign_in: Option<Result<SignIn, String>>,
+    sign_in_rx: Option<mpsc::Receiver<Result<SignIn, String>>>,
     library: Option<Library>,
     pub library_error: Option<String>,
     /// Where the library is kept; `None` is the per-user data folder's (tests set their own).
@@ -242,6 +293,7 @@ pub(crate) fn panel(
     id: DocId,
     page_count: usize,
     has_service: bool,
+    has_claude_code: bool,
 ) -> Option<PanelAction> {
     let mut action = None;
     crate::widgets::begin_dialog(ui);
@@ -258,8 +310,13 @@ pub(crate) fn panel(
         return action;
     }
     ui.label(egui::RichText::new(state.prefs.model().name).font(theme::medium(12.0)).color(t.text_faint));
-    if state.key_status == Some(KeyStatus::Missing) {
-        ui.label(egui::RichText::new(tl!("No API key yet: add one in Preferences ▸ AI assistant.")).color(t.text_muted));
+    let missing = match state.prefs.provider {
+        Provider::ApiKey if state.key_status == Some(KeyStatus::Missing) => Some(tl!("No API key yet: add one in Preferences ▸ AI assistant.")),
+        Provider::ClaudeCode if !has_claude_code => Some(tl!("Claude Code isn't installed on this computer.")),
+        _ => None,
+    };
+    if let Some(missing) = missing {
+        ui.label(egui::RichText::new(missing).color(t.text_muted));
         if ui.button(tl!("Preferences…")).clicked() {
             action = Some(PanelAction::OpenPreferences);
         }
@@ -401,15 +458,14 @@ fn turn_ui(ui: &mut egui::Ui, t: &Tokens, turn: &Turn, index: usize, page_count:
         }
         if turn.state == TurnState::Done {
             ui.horizontal(|ui| {
-                let model_cost = model::format_dollars(turn.model.cost_nanodollars(&turn.usage));
-                ui.label(
-                    egui::RichText::new(crate::i18n::fmt(
-                        tl!("{tokens} tokens · about {cost}"),
-                        &[("tokens", &turn.usage.prompt_tokens().saturating_add(turn.usage.output_tokens).to_string()), ("cost", &model_cost)],
-                    ))
-                    .color(t.text_faint)
-                    .small(),
-                );
+                let tokens = turn.usage.prompt_tokens().saturating_add(turn.usage.output_tokens).to_string();
+                let line = if turn.on_plan {
+                    crate::i18n::fmt(tl!("{tokens} tokens · on your Claude plan"), &[("tokens", &tokens)])
+                } else {
+                    let model_cost = model::format_dollars(turn.model.cost_nanodollars(&turn.usage));
+                    crate::i18n::fmt(tl!("{tokens} tokens · about {cost}"), &[("tokens", &tokens), ("cost", &model_cost)])
+                };
+                ui.label(egui::RichText::new(line).color(t.text_faint).small());
                 if ui.small_button(tl!("Copy")).clicked() {
                     ui.ctx().copy_text(turn.answer_text());
                 }
@@ -474,10 +530,11 @@ fn consent_ui(ctx: &egui::Context, prepared: &Prepared) -> Option<PanelAction> {
     let modal = egui::Modal::new(egui::Id::unique("assistant-consent")).show(ctx, |ui| {
         ui.set_max_width(420.0);
         ui.heading(tl!("Send to Anthropic?"));
-        ui.label(crate::i18n::fmt(
-            tl!("Your question, and the text from this document and your library that it is about, will be sent to Anthropic to answer it with {model}. Requests are billed to your API key."),
-            &[("model", prepared.model.name)],
-        ));
+        let what = match prepared.provider {
+            Provider::ApiKey => tl!("Your question, and the text from this document and your library that it is about, will be sent to Anthropic to answer it with {model}. Requests are billed to your API key."),
+            Provider::ClaudeCode => tl!("Your question, and the text from this document and your library that it is about, will be sent to Anthropic through Claude Code on this computer, to answer it with {model}. Requests count against your Claude plan."),
+        };
+        ui.label(crate::i18n::fmt(what, &[("model", prepared.model.name)]));
         if ui.link(tl!("Anthropic's privacy policy")).clicked() {
             action = Some(PanelAction::OpenPrivacy);
         }
@@ -511,6 +568,49 @@ impl PdfCraftApp {
         }
         self.choose_right_panel(Some(RightPanel::Assistant));
         self.refresh_key_status();
+    }
+
+    /// Ask Claude Code how it is signed in, off the UI thread (Preferences shows the answer).
+    pub fn check_claude_sign_in(&mut self) {
+        let Some(link) = self.ai_service.as_ref().and_then(|s| s.claude_code.clone()) else { return };
+        if self.assistant.sign_in_rx.is_some() {
+            return;
+        }
+        let (tx, rx) = mpsc::channel();
+        let ctx = self.ctx.clone();
+        let work = move || {
+            let _ = tx.send(pdfcraft_engine::guard(|| (link.sign_in)()).unwrap_or_else(Err));
+            if let Some(c) = &ctx {
+                c.request_repaint();
+            }
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Err(e) = std::thread::Builder::new().name("claude-code-sign-in".into()).spawn(work) {
+            log::warn!("couldn't ask Claude Code how it is signed in: {e}");
+            return;
+        }
+        #[cfg(target_arch = "wasm32")]
+        work();
+        self.assistant.sign_in_rx = Some(rx);
+    }
+
+    pub(crate) fn checking_claude_sign_in(&self) -> bool {
+        self.assistant.sign_in_rx.is_some()
+    }
+
+    fn poll_sign_in(&mut self) {
+        let Some(rx) = &self.assistant.sign_in_rx else { return };
+        match rx.try_recv() {
+            Ok(answer) => {
+                self.assistant.claude_sign_in = Some(answer);
+                self.assistant.sign_in_rx = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.assistant.claude_sign_in = Some(Err(tl!("Claude Code didn't answer.").to_owned()));
+                self.assistant.sign_in_rx = None;
+            }
+        }
     }
 
     /// Check whether a key is set (on opening the panel or Preferences, and after a change).
@@ -587,7 +687,7 @@ impl PdfCraftApp {
     /// selection, or the current page.
     fn prepare_question(&mut self, index: usize) -> Result<Prepared, String> {
         let service = self.ai_service.clone().ok_or_else(|| tl!("The AI assistant needs the desktop app.").to_owned())?;
-        let key = service.key().ok_or_else(|| tl!("No API key yet: add one in Preferences ▸ AI assistant.").to_owned())?;
+        let (_, key) = service.route(&self.assistant.prefs)?;
         let view = self.views.get(index).ok_or_else(|| "no document".to_owned())?;
         let id = view.id;
         let (page, selected, about) = match self.assistant.context.clone().filter(|(doc, ..)| *doc == id) {
@@ -610,8 +710,10 @@ impl PdfCraftApp {
         let turn = claude::user_turn(&passages, None, &question).map_err(|e| e.to_string())?;
         let model = self.assistant.prefs.model();
         let search = WebSearch { max_uses: 3, ..WebSearch::default() };
-        let opts =
-            Options { effort: self.assistant.prefs.effort, web_search: self.assistant.prefs.web_search.then_some(&search), ..Options::new(model) };
+        // Claude Code runs with no tools, so it can't search the web.
+        let provider = self.assistant.prefs.provider;
+        let searching = self.assistant.prefs.web_search && provider == Provider::ApiKey;
+        let opts = Options { effort: self.assistant.prefs.effort, web_search: searching.then_some(&search), ..Options::new(model) };
         let history = self.assistant.conversations.get(&id).map(|c| c.history.clone()).unwrap_or_default();
         let request = claude::request(&opts, &key, &history, &turn).map_err(|e| e.to_string())?;
         let mut all = history;
@@ -629,6 +731,7 @@ impl PdfCraftApp {
             redacted: ctx.redacted_glyphs,
             encrypted: ctx.encrypted,
             model,
+            provider,
         })
     }
 
@@ -701,19 +804,25 @@ impl PdfCraftApp {
             errors: Vec::new(),
             searches: Vec::new(),
             model: prepared.model,
+            on_plan: prepared.provider == Provider::ClaudeCode,
         });
         if conversation.turns.len() > MAX_TURNS {
             conversation.turns.remove(0);
         }
         self.assistant.draft.clear();
         let cancel = Arc::new(AtomicBool::new(false));
-        let rx = start_worker(service.transport.clone(), prepared.request, prepared.sources, cancel.clone(), self.ctx.clone());
+        let transport = match prepared.provider {
+            Provider::ClaudeCode => service.claude_code.as_ref().map_or_else(|| service.transport.clone(), |c| c.transport.clone()),
+            Provider::ApiKey => service.transport.clone(),
+        };
+        let rx = start_worker(transport, prepared.request, prepared.sources, cancel.clone(), self.ctx.clone());
         self.assistant.running = Some(Running { doc: prepared.doc, rx, cancel, turn: prepared.turn });
     }
 
     /// Take what the worker sent since the last frame.
     pub(crate) fn poll_assistant(&mut self) {
         self.finish_library_jump();
+        self.poll_sign_in();
         let Some(running) = &self.assistant.running else { return };
         let doc = running.doc;
         let mut finished: Option<Result<Reply, String>> = None;

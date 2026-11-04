@@ -22,4 +22,11 @@ Attribute copying is bounded: 64 KiB of names, 1024 attributes, 16 MiB per value
 
 `SessionKeys` keeps keys in memory only, for portable mode and systems without a keychain.
 
+`ClaudeCode` is the other way to Claude: it runs the user's own `claude` program for each request, signed in with their Claude subscription (personal use; the rules are in `pdfcraft_ai::claude_code`).
+- **Finding it.** `PDFCRAFT_CLAUDE`, `~/.local/bin`, `~/.claude/local`, Homebrew, `/usr/local/bin`, the `PATH`, then the copy inside the Claude desktop app. Finding it only looks at files; nothing runs until the user chooses Claude Code and asks.
+- **Locked down.** No tools, MCP servers, hooks, plugins, CLAUDE.md, memory or saved session; it runs in an empty folder of its own, and `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_OAUTH_TOKEN` are taken out of its environment so the subscription is used.
+- **Limits.** 16 MiB of output, 4 MiB per line, stopped after 3 minutes without output or 15 in all, or when the user stops it; the program is killed when a run ends early.
+- **Sign-in.** `sign_in()` asks the program (`claude auth status`); PdfCraft never reads its credentials.
+- **Tests.** A fake `claude` (a shell script) covers an answer with its citation and the arguments it got, bad arguments, a missing program, a silent one, a flood, the sign-in check, finding it, and the environment it gets.
+
 `api_key(store, account, env)` looks for a key in this order: the stored key, else `ANTHROPIC_API_KEY`, each checked as printable ASCII of at most 1 KiB. The key is never written to a settings file. The real keychain round trip is an `#[ignore]` test (`cargo test -p pdfcraft-platform -- --ignored`), since it changes the user's keychain.

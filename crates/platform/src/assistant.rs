@@ -10,6 +10,10 @@
 //!   yet, and [`api_key`] falls back to `ANTHROPIC_API_KEY` from the environment, or a key kept for
 //!   the session only ([`SessionKeys`]). The key is never written to a settings file.
 //!
+//! - [`ClaudeCode`] instead runs the user's own `claude` program, signed in with their Claude
+//!   subscription, with its tools and customisations turned off (personal use; see
+//!   `pdfcraft_ai::claude_code`).
+//!
 //! Nothing here runs unless the user turns the assistant on and asks a question: no background
 //! traffic, no update checks, no telemetry.
 
@@ -168,6 +172,12 @@ impl SecretStore for Keychain {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use transport::{HttpsTransport, MAX_RESPONSE_BYTES};
+
+/// Claude Code as the way to Claude, on the user's own subscription (personal use).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod claude_code;
+#[cfg(not(target_arch = "wasm32"))]
+pub use claude_code::ClaudeCode;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod transport {

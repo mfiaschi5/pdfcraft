@@ -579,6 +579,12 @@ fn card_assistant(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mu
         return;
     }
     ui.add_space(6.0);
+    ctx.label_primary(ui, tl!("Connect with"), t);
+    use crate::assistant_ui::Provider;
+    let provider = &mut app.assistant.prefs.provider;
+    crate::widgets::radio_value(ui, provider, Provider::ApiKey, tl!("An Anthropic API key"));
+    crate::widgets::radio_value(ui, provider, Provider::ClaudeCode, tl!("Claude Code, with your Claude subscription (personal use)"));
+    ui.add_space(6.0);
     let label = ctx.label_primary(ui, tl!("Model"), t);
     let prefs = &mut app.assistant.prefs;
     craft_ui::ComboBox::from_id_salt("assistant-model")
@@ -608,6 +614,10 @@ fn card_assistant(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mu
         .response
         .labelled_by(label.id);
     ctx.checkbox(ui, &mut app.assistant.prefs.preview, tl!("Show what will be sent before each question"), t);
+    if app.assistant.prefs.provider == Provider::ClaudeCode {
+        card_claude_code(ui, app, t, ctx);
+        return;
+    }
     ctx.checkbox(ui, &mut app.assistant.prefs.web_search, tl!("Let the assistant search the web (billed per search)"), t);
     ui.add_space(6.0);
     let label = ctx.label_primary(ui, tl!("API key"), t);
@@ -634,6 +644,62 @@ fn card_assistant(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mu
     }
     if remove {
         app.remove_assistant_key();
+    }
+}
+
+/// Claude Code instead of a key: where the program is, whether it is signed in, how to sign in.
+fn card_claude_code(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mut PrefSearchContext) {
+    ui.add_space(6.0);
+    let program = app.ai_service.as_ref().and_then(|s| s.claude_code.as_ref()).map(|c| c.program.clone());
+    let Some(program) = program else {
+        ctx.label_secondary(
+            ui,
+            tl!("Claude Code isn't installed on this computer. Install it from claude.com/claude-code, sign in to it, then restart PdfCraft."),
+            t,
+        );
+        return;
+    };
+    ctx.label_primary(ui, tl!("Claude Code"), t);
+    ctx.label_secondary(ui, &program, t);
+    let status = match &app.assistant.claude_sign_in {
+        None => None,
+        Some(Ok(s)) if s.is_subscription() => Some(match &s.email {
+            Some(email) => crate::i18n::fmt(tl!("Signed in to your Claude account ({email})."), &[("email", email)]),
+            None => tl!("Signed in to your Claude account.").to_owned(),
+        }),
+        Some(Ok(s)) => {
+            Some(crate::i18n::fmt(tl!("Signed in with {method}, not a Claude subscription: requests go on that account."), &[("method", &s.method)]))
+        }
+        Some(Err(e)) => Some(e.clone()),
+    };
+    if let Some(status) = status {
+        ctx.label_secondary(ui, &status, t);
+    }
+    let mut check = false;
+    let mut copy = false;
+    ui.horizontal(|ui| {
+        check = ui.add_enabled(!app.checking_claude_sign_in(), egui::Button::new(tl!("Check sign-in"))).clicked();
+        copy = ui.button(tl!("Copy the sign-in command")).clicked();
+    });
+    if app.checking_claude_sign_in() {
+        ui.spinner();
+    }
+    ctx.label_secondary(
+        ui,
+        tl!("To sign in, paste the command into Terminal and follow it in your browser. Web search isn't available this way."),
+        t,
+    );
+    ctx.label_secondary(
+        ui,
+        tl!("For your own use: Anthropic asks apps to use API keys, and lets you sign in to the unmodified Claude Code program with your own subscription. PdfCraft runs that program, with its tools and add-ons turned off, and never reads its sign-in."),
+        t,
+    );
+    if check {
+        app.check_claude_sign_in();
+    }
+    if copy {
+        ui.ctx().copy_text(format!("\"{program}\" auth login"));
+        app.notify_tr("Sign-in command copied");
     }
 }
 
