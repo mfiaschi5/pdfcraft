@@ -36,6 +36,7 @@ mod history;
 pub mod js;
 mod layers;
 pub mod links;
+pub mod map_assist;
 pub mod ocr;
 mod open;
 pub mod optimizer;

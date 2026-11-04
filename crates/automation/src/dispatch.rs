@@ -177,6 +177,17 @@ impl Automation {
             "ai_library_list" => self.ai_library_list(&a)?,
             "ai_library_search" => self.ai_library_search(&a)?,
             "ai_ask" => self.ai_ask(&a)?,
+            "graph_create" => self.graph_create(&a)?,
+            "graph_show" => self.graph_show(&a)?,
+            "graph_add_node" => self.graph_add_node(&a)?,
+            "graph_connect" => self.graph_connect(&a)?,
+            "graph_add_kind" => self.graph_add_kind(&a)?,
+            "graph_remove" => self.graph_remove(&a)?,
+            "graph_layout" => self.graph_layout(&a)?,
+            "graph_export" => self.graph_export(&a)?,
+            "graph_import" => self.graph_import(&a)?,
+            "graph_apply" => self.graph_apply(&a)?,
+            "ai_map_edit" => self.ai_map_edit(&a)?,
             "render_preview" => return self.render_preview(&a),
             "page_number" => {
                 use pdfcraft_organize::LabelStyle as L;

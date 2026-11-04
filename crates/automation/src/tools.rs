@@ -73,6 +73,10 @@ fn comment_ref(mut extra: Value) -> Value {
     extra
 }
 
+fn map_arg() -> Value {
+    json!({ "type": "string", "description": "A file path: the concept map (.pdfmap.json) (relative to --root when set)." })
+}
+
 fn library_arg() -> Value {
     json!({ "type": "string", "description": "A file path: the AI library's JSON file (relative to --root when set), created on first change. Without it, the last library named, or one kept for the session." })
 }
@@ -1535,6 +1539,50 @@ pub fn tools() -> Vec<ToolDef> {
                 "web_search": {"type":"boolean","description":"Let the provider search the web (default false)."},
                 "dry_run": {"type":"boolean","description":"Return the request instead of sending it."},
             }), &["doc", "page", "question"])),
+        t("graph_create", "Create a concept map", "Create an empty concept map file (.pdfmap.json) with the default kinds of connection: is related to, supports, contradicts, is an example of, defines, causes, is part of, comes before, see also. Refused if the file exists.")
+            .with(schema(json!({"map": map_arg(), "title": {"type":"string","maxLength":256}}), &["map"])),
+        t("graph_show", "Show a concept map", "A concept map's title, kinds of connection (id, name, directed, line), nodes (id, type: snippet, picture, note or concept; text; source document title, 1-based page, sha256 and paths; position; author) and connections (id, from, to, kind, strength: weak, medium or strong; label).")
+            .ro()
+            .with(schema(json!({"map": map_arg()}), &["map"])),
+        t("graph_add_node", "Add a node to a concept map", "Add a concept or note (text), or a snippet: the text of an open document's page or of a rect on it (points from the top-left of the displayed page), anchored to the document by its SHA-256 and the page. Snippets follow the assistant's rules: refused for documents that forbid copying, and text under unapplied redaction marks is left out.")
+            .with(schema(json!({
+                "map": map_arg(), "type": {"type":"string","enum":["concept","note","snippet"]}, "text": {"type":"string","maxLength":16384},
+                "doc": doc(), "page": {"type":"integer","minimum":1},
+                "rect": {"type":"array","items":{"type":"number"},"minItems":4,"maxItems":4,"description":"[x0, y0, x1, y1] in points from the top-left of the displayed page."},
+                "position": {"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2,"description":"[x, y] on the map."},
+            }), &["map", "type"])),
+        t("graph_connect", "Connect two nodes", "Connect two nodes of a concept map with a kind of connection (by name, see graph_show) and a strength: weak, medium (default) or strong. A kind without a direction connects a pair once.")
+            .with(schema(json!({
+                "map": map_arg(), "from": {"type":"integer","minimum":1}, "to": {"type":"integer","minimum":1}, "kind": {"type":"string"},
+                "strength": {"type":"string","enum":["weak","medium","strong"]}, "label": {"type":"string","maxLength":256},
+            }), &["map", "from", "to", "kind"])),
+        t("graph_add_kind", "Add a kind of connection", "Add a kind of connection of your own to a concept map, besides the default ones: its name, whether it has a direction (default true), and its line: solid (default), dashed or dotted. A kind with that name already there is returned instead.")
+            .with(schema(json!({
+                "map": map_arg(), "name": {"type":"string","minLength":1,"maxLength":256}, "directed": {"type":"boolean"},
+                "line": {"type":"string","enum":["solid","dashed","dotted"]},
+            }), &["map", "name"])),
+        t("graph_remove", "Remove from a concept map", "Remove a node (and its connections) or a connection from a concept map.")
+            .destructive()
+            .with(schema(json!({"map": map_arg(), "node": {"type":"integer","minimum":1}, "connection": {"type":"integer","minimum":1}}), &["map"])),
+        t("graph_layout", "Tidy up a concept map", "Arrange a concept map's nodes with a force-directed layout: connected nodes pull together (strong connections more), all nodes push apart.")
+            .with(schema(json!({"map": map_arg()}), &["map"])),
+        t("graph_export", "Export a concept map", "Write a concept map as JSON Canvas (Obsidian Canvas) or GraphML (yEd, Gephi). Pictures are written as their descriptions.")
+            .with(schema(json!({"map": map_arg(), "format": {"type":"string","enum":["json_canvas","graphml"]}, "out": path_arg()}), &["map", "format", "out"])),
+        t("graph_import", "Import a JSON Canvas", "Create a concept map from a JSON Canvas file: text nodes become notes, file and link nodes concepts, connections keep the kind their label names (else is related to). Refused if the map file exists.")
+            .with(schema(json!({"canvas": {"type":"string","description":"A file path: the JSON Canvas (.canvas) to read (relative to --root when set)."}, "map": map_arg(), "title": {"type":"string","maxLength":256}}), &["canvas", "map"])),
+        t("graph_apply", "Apply an AI map proposal", "Apply the changes you keep from a proposal ai_map_edit returned (accept: 1-based change numbers). New nodes are placed near the node they name; a connection to a new node you didn't keep is skipped. Returns the nodes and connections added and what was skipped and why.")
+            .destructive()
+            .with(schema(json!({"map": map_arg(), "proposal": {"type":"object","description":"The proposal object from ai_map_edit."}, "accept": {"type":"array","items":{"type":"integer","minimum":1},"maxItems":200}}), &["map", "proposal", "accept"])),
+        t("ai_map_edit", "Ask the AI to edit a concept map", "Ask Claude for changes to a concept map (for example: extract the key concepts from this page, connect these nodes, find related passages in my library). It answers with proposed nodes, connections, rewordings and removals, each with a reason; snippets quote a passage word for word and are anchored to its document and page. Nothing is applied: graph_apply applies the changes you keep. With doc and page, that page is given as passages; up to k library passages (default 6) when a library is in use. dry_run returns the first request; sending needs pdfcraft-cli --allow-ai-network.")
+            .ro()
+            .with(schema(json!({
+                "map": map_arg(), "request": {"type":"string","minLength":1,"maxLength":32768},
+                "doc": doc(), "page": {"type":"integer","minimum":1}, "nodes": {"type":"array","items":{"type":"integer","minimum":1},"description":"The nodes the request is about."},
+                "k": {"type":"integer","minimum":0,"maximum":50}, "library": library_arg(),
+                "model": {"type":"string","enum":pdfcraft_ai::model::MODELS.iter().map(|m| m.id).collect::<Vec<_>>()},
+                "effort": {"type":"string","enum":["low","medium","high","xhigh","max"]},
+                "dry_run": {"type":"boolean","description":"Return the first request instead of sending it."},
+            }), &["map", "request"])),
         t("render_preview", "Render a preview", "Render a PNG bounded by max_side (default 1024), without changing or saving the document. Page defaults to 1; doc may be omitted when exactly one document is open. Render warnings follow the image as page_render gives them.")
             .ro().with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"max_side":{"type":"integer","minimum":1,"maximum":4096}}), &[])),
     ]

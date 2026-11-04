@@ -1,0 +1,21 @@
+[package]
+name = "pdfcraft-graph"
+description = "Concept maps: snippets from PDFs linked by typed, weighted connections; undo, layout, JSON Canvas and GraphML"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Pictures in the saved form; the same version the AI crate uses.
+base64 = "0.23"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -1,5 +1,6 @@
 pub(super) mod a11y_ui;
 pub(super) mod actions_ui;
+pub(super) mod assistant_ui;
 pub(super) mod combine_grid;
 pub(super) mod combine_ui;
 pub(super) mod compare_ui;
@@ -8,6 +9,7 @@ pub(super) mod create_ui;
 pub(super) mod export_ui;
 pub(super) mod files;
 pub(super) mod js_ui;
+pub(super) mod map_ui;
 pub(super) mod ocr_ui;
 pub(super) mod optimize_ui;
 pub(super) mod print_ui;

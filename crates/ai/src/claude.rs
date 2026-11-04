@@ -18,7 +18,7 @@ use crate::model::{Effort, Model, Usage};
 use crate::source::{MAX_TITLE, MAX_URL, Source, SourceId};
 use crate::sse::{SseDecoder, SseItem};
 use crate::text;
-use crate::transport::{HeaderValue, HttpRequest, Secret};
+use crate::transport::{HeaderValue, HttpRequest, Secret, Transport, TransportError};
 
 pub const API_URL: &str = "https://api.anthropic.com/v1/messages";
 pub const API_VERSION: &str = "2026-10-21";
@@ -147,12 +147,65 @@ pub struct Options<'a> {
     /// Ask the server to re-run a refused request on another model, where the model allows it.
     pub fallbacks: bool,
     pub web_search: Option<&'a WebSearch>,
+    /// Tools the app runs when the model calls them (the map's edits).
+    pub tools: &'a [ToolDef],
 }
 
 impl<'a> Options<'a> {
     pub fn new(model: &'a Model) -> Self {
-        Self { model, effort: Effort::default(), max_tokens: DEFAULT_MAX_TOKENS, fallbacks: true, web_search: None }
+        Self { model, effort: Effort::default(), max_tokens: DEFAULT_MAX_TOKENS, fallbacks: true, web_search: None, tools: &[] }
     }
+}
+
+/// A tool the app runs when the model calls it (a client tool).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToolDef {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub input_schema: Value,
+}
+
+/// A call the model made: a `tool_use` block of an assistant message.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub input: Value,
+}
+
+/// Calls one answer may make.
+pub const MAX_TOOL_CALLS: usize = 64;
+
+/// The tool calls in an assistant message, in order (at most [`MAX_TOOL_CALLS`]).
+pub fn tool_calls(message: &Message) -> Vec<ToolCall> {
+    message
+        .content
+        .iter()
+        .filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_use"))
+        .filter_map(|b| {
+            Some(ToolCall {
+                id: text::capped(b.get("id")?.as_str()?, 128),
+                name: text::capped(b.get("name")?.as_str()?, 64),
+                input: b.get("input").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .take(MAX_TOOL_CALLS)
+        .collect()
+}
+
+/// The user turn that answers tool calls: one `tool_result` per (call id, text, is error).
+pub fn tool_results(results: &[(String, String, bool)]) -> Message {
+    let content = results
+        .iter()
+        .map(|(id, result, is_error)| {
+            let mut block = json!({"type": "tool_result", "tool_use_id": id, "content": text::prefix(result, 8 * 1024)});
+            if *is_error && let Some(obj) = block.as_object_mut() {
+                obj.insert("is_error".into(), json!(true));
+            }
+            block
+        })
+        .collect();
+    Message { role: Role::User, content }
 }
 
 /// The user turn for a question: the passages, then the image, then the question.
@@ -234,8 +287,16 @@ pub fn request(opts: &Options<'_>, key: &Secret, history: &[Message], turn: &Mes
         if fallbacks {
             obj.insert("fallbacks".into(), json!("default"));
         }
+        let mut tools: Vec<Value> = opts
+            .tools
+            .iter()
+            .map(|t| json!({"name": t.name, "description": t.description, "input_schema": t.input_schema, "eager_input_streaming": true}))
+            .collect();
         if let Some(search) = opts.web_search {
-            obj.insert("tools".into(), json!([web_search_tool(search)?]));
+            tools.push(web_search_tool(search)?);
+        }
+        if !tools.is_empty() {
+            obj.insert("tools".into(), Value::Array(tools));
         }
     }
     let body = serde_json::to_vec(&body).map_err(|e| RequestError::Json(e.to_string()))?;
@@ -321,6 +382,56 @@ pub fn sent_sources(messages: &[Message]) -> Vec<Option<SourceId>> {
         .filter(|b| b.get("type").and_then(Value::as_str) == Some("search_result"))
         .map(|b| b.get("source").and_then(Value::as_str).and_then(SourceId::parse))
         .collect()
+}
+
+/// Most of an error response kept to report it.
+const MAX_ERROR_BODY: usize = 64 * 1024;
+
+/// What a sent request came back with: the assistant message as received (to continue the
+/// conversation), its usage and how it stopped.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Reply {
+    pub status: u16,
+    pub message: Message,
+    pub usage: Usage,
+    pub stop: Option<StopReason>,
+}
+
+/// Send `request` through `transport` and decode the answer, handing each event to `on_event` as
+/// it arrives (the panel shows the answer as it streams). `on_event` returning `Break` cancels:
+/// the transport stops reading. An error status ends with one [`Event::ProviderError`] read from
+/// the response body. `sources` is [`sent_sources`] of the messages sent.
+pub fn send(
+    transport: &dyn Transport,
+    request: &HttpRequest,
+    sources: Vec<Option<SourceId>>,
+    on_event: &mut dyn FnMut(&Event) -> std::ops::ControlFlow<()>,
+) -> Result<Reply, TransportError> {
+    let mut decoder = Decoder::new(sources);
+    let mut raw = Vec::new();
+    let mut events = Vec::new();
+    let status = transport.post_stream(request, &mut |bytes| {
+        if raw.len() < MAX_ERROR_BODY {
+            raw.extend_from_slice(bytes.get(..MAX_ERROR_BODY.saturating_sub(raw.len())).unwrap_or(bytes));
+        }
+        decoder.push(bytes, &mut events);
+        for event in events.drain(..) {
+            if on_event(&event).is_break() {
+                return std::ops::ControlFlow::Break(());
+            }
+        }
+        std::ops::ControlFlow::Continue(())
+    })?;
+    if status == 200 {
+        decoder.finish(&mut events);
+        for event in events.drain(..) {
+            // The answer is complete; a late cancel changes nothing.
+            let _ = on_event(&event);
+        }
+    } else {
+        let _ = on_event(&error_event(status, &raw));
+    }
+    Ok(Reply { status, message: decoder.message(), usage: decoder.usage(), stop: decoder.stop_reason().cloned() })
 }
 
 /// An HTTP error response (any status but 200) as an event.

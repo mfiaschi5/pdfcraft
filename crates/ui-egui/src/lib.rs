@@ -58,6 +58,8 @@ mod editing;
 mod home;
 mod hotbar;
 mod panels;
+pub use assistant_ui::{AiService, AssistantPrefs, TurnState as AssistantTurnState};
+pub use map_ui::{Picked as MapPicked, maps_dir};
 pub use print_ui::{Handling as PrintHandling, OptionsSource, PrintDraft, PrinterSource, Which as PrintWhich, system_printers};
 pub use redact_ui::{HiddenDraft, PagesDraft as RedactPagesDraft, RedactPrefs, SearchDraft as RedactSearchDraft, SearchMode as RedactSearchMode};
 pub mod i18n;
@@ -171,6 +173,7 @@ use widgets::icon_data;
 pub use widgets::icons;
 use workflows::a11y_ui;
 use workflows::actions_ui;
+use workflows::assistant_ui;
 use workflows::combine_grid;
 use workflows::combine_ui;
 use workflows::compare_ui;
@@ -178,6 +181,7 @@ use workflows::create_ui;
 use workflows::export_ui;
 use workflows::files;
 use workflows::js_ui;
+use workflows::map_ui;
 use workflows::ocr_ui;
 use workflows::optimize_ui;
 use workflows::print_ui;
@@ -506,6 +510,13 @@ pub struct PdfCraftApp {
     /// Compare files: the chosen older document and the last result.
     pub compare_old: Option<DocId>,
     pub compare: Option<compare_ui::CompareState>,
+    /// The AI assistant: its preferences, conversations and the request in flight.
+    pub assistant: assistant_ui::AssistantState,
+    /// What the assistant sends with: given by the desktop app, absent on the web and in tests
+    /// that don't provide one, so nothing can be sent.
+    pub ai_service: Option<assistant_ui::AiService>,
+    /// The concept map workspace: the map shown, its undo steps, and the assistant's proposal.
+    pub maps: map_ui::MapState,
     /// The JavaScript console and the Document JavaScripts draft.
     pub js_console: js_ui::JsConsole,
     pub doc_js: js_ui::DocJsDraft,

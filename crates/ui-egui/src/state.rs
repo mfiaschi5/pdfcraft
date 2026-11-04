@@ -52,6 +52,8 @@ pub enum RightPanel {
     Search,
     /// Compare files: the differences.
     Compare,
+    /// The AI assistant: questions about the document, answers that cite its pages.
+    Assistant,
 }
 
 /// Quick-action bar tools (the vertical floating strip).
@@ -387,6 +389,8 @@ pub enum LinkOrigin {
     Button,
     /// A script (`app.launchURL`).
     Script,
+    /// A web page the AI assistant's answer cites.
+    Assistant,
 }
 
 impl LinkOrigin {
@@ -395,6 +399,7 @@ impl LinkOrigin {
             Self::Link => "A link",
             Self::Button => "A button",
             Self::Script => "A script",
+            Self::Assistant => "A citation",
         }
     }
 }

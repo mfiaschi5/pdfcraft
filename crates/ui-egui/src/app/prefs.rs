@@ -153,6 +153,8 @@ impl PdfCraftApp {
         v["organize_zoom"] = serde_json::json!(self.organize_zoom);
         // Canonical names survive changes to the order of PAPERS and do not depend on UI language.
         v["print_paper"] = serde_json::json!(pdfcraft_engine::print::PAPERS.get(self.print_draft.paper).map(|(name, _)| *name));
+        // Preferences ▸ AI assistant. The API key is never here: it is in the keychain.
+        v["assistant"] = serde_json::to_value(&self.assistant.prefs).unwrap_or_default();
         v.to_string()
     }
 
@@ -165,6 +167,11 @@ impl PdfCraftApp {
             }
             bar.normalize();
             self.hotbar = bar;
+        }
+        if let Ok(mut prefs) = serde_json::from_value::<crate::AssistantPrefs>(v["assistant"].clone()) {
+            // A model this build doesn't offer falls back to the default.
+            prefs.model = prefs.model().id.to_owned();
+            self.assistant.prefs = prefs;
         }
         let panels = side_panels::restore(&v);
         self.side_panels = panels.panels;

@@ -4216,7 +4216,9 @@ dependencies = [
  "egui",
  "fmv-macos-events",
  "log",
+ "pdfcraft-ai",
  "pdfcraft-engine",
+ "pdfcraft-platform",
  "pdfcraft-ui-egui",
  "pollster 1.0.1",
  "raw-window-handle",
@@ -4289,6 +4291,7 @@ dependencies = [
  "pdfcraft-cos",
  "pdfcraft-engine",
  "pdfcraft-fonts",
+ "pdfcraft-graph",
  "pdfcraft-model",
  "pdfcraft-organize",
  "pdfcraft-platform",
@@ -4419,6 +4422,7 @@ dependencies = [
  "pdfcraft-fonts",
  "pdfcraft-forms",
  "pdfcraft-geom",
+ "pdfcraft-graph",
  "pdfcraft-js",
  "pdfcraft-measure",
  "pdfcraft-model",
@@ -4434,6 +4438,7 @@ dependencies = [
  "pdfcraft-xfa",
  "pdfcraft-xfdf",
  "png 0.18.1",
+ "serde_json",
  "thiserror 2.0.21",
  "tiff",
  "unicode-segmentation",
@@ -4486,6 +4491,17 @@ dependencies = [
 [[package]]
 name = "pdfcraft-geom"
 version = "0.18.0"
+
+[[package]]
+name = "pdfcraft-graph"
+version = "0.18.0"
+dependencies = [
+ "base64 0.23.1",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "pdfcraft-js"
@@ -4696,10 +4712,12 @@ dependencies = [
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
+ "pdfcraft-ai",
  "pdfcraft-content",
  "pdfcraft-cos",
  "pdfcraft-engine",
  "pdfcraft-fonts",
+ "pdfcraft-graph",
  "pdfcraft-model",
  "pdfcraft-platform",
  "pdfcraft-render",

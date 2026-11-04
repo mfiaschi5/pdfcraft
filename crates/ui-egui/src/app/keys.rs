@@ -40,6 +40,11 @@ impl PdfCraftApp {
         if self.full_screen && self.combine_tab.preview.is_none() && ctx.input(|i| i.key_pressed(Key::Escape)) {
             self.set_full_screen(ctx, false);
         }
+        // The concept map covers the document, which takes no keys meanwhile.
+        if self.maps.open {
+            self.map_keys(ctx);
+            return;
+        }
         if let Some(i) = self.active {
             // Select all belongs to the document or page grid, unless a text field or
             // overlay owns the keyboard. Other canvas shortcuts keep their own handling.

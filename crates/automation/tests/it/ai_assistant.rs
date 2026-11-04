@@ -303,6 +303,8 @@ fn ai_ask_leaves_out_an_earlier_copy_of_the_open_file() {
 struct Canned {
     status: u16,
     body: Vec<u8>,
+    /// Bodies for successive requests, used before `body` while any are left.
+    queue: std::sync::Mutex<Vec<String>>,
     seen: std::sync::Mutex<Vec<pdfcraft_ai::transport::HttpRequest>>,
 }
 
@@ -313,7 +315,12 @@ impl pdfcraft_ai::transport::Transport for Canned {
         on_bytes: &mut dyn FnMut(&[u8]) -> std::ops::ControlFlow<()>,
     ) -> Result<u16, pdfcraft_ai::transport::TransportError> {
         self.seen.lock().unwrap().push(req.clone());
-        for piece in self.body.chunks(7) {
+        let queued = {
+            let mut q = self.queue.lock().unwrap();
+            (!q.is_empty()).then(|| q.remove(0).into_bytes())
+        };
+        let body = queued.unwrap_or_else(|| self.body.clone());
+        for piece in body.chunks(7) {
             if on_bytes(piece).is_break() {
                 return Err(pdfcraft_ai::transport::TransportError::Cancelled);
             }
@@ -323,7 +330,7 @@ impl pdfcraft_ai::transport::Transport for Canned {
 }
 
 fn networked(dir: &Path, status: u16, body: &str, key: Option<&'static str>) -> (Automation, Arc<Canned>) {
-    let canned = Arc::new(Canned { status, body: body.as_bytes().to_vec(), seen: Default::default() });
+    let canned = Arc::new(Canned { status, body: body.as_bytes().to_vec(), queue: Default::default(), seen: Default::default() });
     let network = pdfcraft_automation::AiNetwork { transport: canned.clone(), key: Arc::new(move || key.map(pdfcraft_ai::transport::Secret::new)) };
     (auto(dir).with_ai_network(network), canned)
 }
@@ -379,5 +386,109 @@ fn ai_ask_reports_provider_errors_and_a_missing_key() {
     let e = b.call("ai_ask", &json!({"doc": doc, "page": 1, "question": "Why?"})).unwrap_err();
     assert!(e.to_string().contains("no API key"), "{e}");
     assert!(canned.seen.lock().unwrap().is_empty(), "nothing is sent without a key");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn concept_maps_are_built_shown_tidied_and_exported() {
+    let dir = workdir("maps");
+    let mut a = auto(&dir);
+    ok(&mut a, "graph_create", json!({"map": "study.pdfmap.json", "title": "Birds"}));
+    assert!(a.call("graph_create", &json!({"map": "study.pdfmap.json"})).is_err(), "an existing map isn't replaced");
+    let doc = ok(&mut a, "doc_open", json!({"path": "birds.pdf"}))["doc"].clone();
+    let concept = ok(&mut a, "graph_add_node", json!({"map": "study.pdfmap.json", "type": "concept", "text": "Flight"}))["id"].clone();
+    let snippet = ok(&mut a, "graph_add_node", json!({"map": "study.pdfmap.json", "type": "snippet", "doc": doc, "page": 2}))["id"].clone();
+    ok(
+        &mut a,
+        "graph_connect",
+        json!({"map": "study.pdfmap.json", "from": snippet, "to": concept, "kind": "is an example of", "strength": "strong"}),
+    );
+    assert!(a.call("graph_connect", &json!({"map": "study.pdfmap.json", "from": snippet, "to": concept, "kind": "no such kind"})).is_err());
+    // A kind of the user's own, then used like the default ones.
+    let kind = ok(&mut a, "graph_add_kind", json!({"map": "study.pdfmap.json", "name": " hunts ", "line": "dashed"}));
+    assert_eq!(kind["name"], "hunts");
+    assert_eq!(
+        ok(&mut a, "graph_add_kind", json!({"map": "study.pdfmap.json", "name": "hunts"}))["id"],
+        kind["id"],
+        "the same name is the same kind"
+    );
+    assert!(a.call("graph_add_kind", &json!({"map": "study.pdfmap.json", "name": "x", "line": "wavy"})).is_err());
+    ok(&mut a, "graph_connect", json!({"map": "study.pdfmap.json", "from": concept, "to": snippet, "kind": "hunts", "strength": "weak"}));
+    let shown = ok(&mut a, "graph_show", json!({"map": "study.pdfmap.json"}));
+    let nodes = shown["nodes"].as_array().unwrap();
+    assert_eq!(nodes.len(), 2);
+    let snip = nodes.iter().find(|n| n["type"] == "snippet").unwrap();
+    assert!(snip["text"].as_str().unwrap().contains("Falcons stoop"), "{snip}");
+    assert_eq!((snip["source"]["title"].as_str(), snip["source"]["page"].as_u64()), (Some("birds.pdf"), Some(2)));
+    assert_eq!(shown["connections"][0]["kind"], "is an example of");
+    assert_eq!(shown["connections"][0]["strength"], "strong");
+    assert_eq!((shown["connections"][1]["kind"].as_str(), shown["connections"][1]["strength"].as_str()), (Some("hunts"), Some("weak")));
+    let own = shown["kinds"].as_array().unwrap().iter().find(|k| k["name"] == "hunts").cloned().unwrap();
+    assert_eq!((own["line"].as_str(), own["directed"].as_bool()), (Some("dashed"), Some(true)), "{own}");
+    ok(&mut a, "graph_layout", json!({"map": "study.pdfmap.json"}));
+    ok(&mut a, "graph_export", json!({"map": "study.pdfmap.json", "format": "json_canvas", "out": "study.canvas"}));
+    ok(&mut a, "graph_export", json!({"map": "study.pdfmap.json", "format": "graphml", "out": "study.graphml"}));
+    let graphml = std::fs::read_to_string(dir.join("root/study.graphml")).unwrap();
+    assert!(graphml.contains("<data key=\"kind\">is an example of</data>"));
+    let imported = ok(&mut a, "graph_import", json!({"canvas": "study.canvas", "map": "copy.pdfmap.json"}));
+    assert_eq!(imported["map"]["nodes"].as_array().map(Vec::len), Some(2));
+    assert_eq!(imported["map"]["connections"][0]["kind"], "is an example of");
+    ok(&mut a, "graph_remove", json!({"map": "study.pdfmap.json", "node": concept}));
+    assert_eq!(ok(&mut a, "graph_show", json!({"map": "study.pdfmap.json"}))["connections"].as_array().map(Vec::len), Some(0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn map_snippets_follow_the_assistants_privacy_rules() {
+    let dir = workdir("map-privacy");
+    let mut a = auto(&dir);
+    ok(&mut a, "graph_create", json!({"map": "m.pdfmap.json"}));
+    let doc = ok(&mut a, "doc_open", json!({"path": "report.pdf"}))["doc"].clone();
+    let id = ok(&mut a, "graph_add_node", json!({"map": "m.pdfmap.json", "type": "snippet", "doc": doc, "page": 1}))["id"].clone();
+    let shown = ok(&mut a, "graph_show", json!({"map": "m.pdfmap.json"}));
+    let text = shown["nodes"].as_array().unwrap().iter().find(|n| n["id"] == id).unwrap()["text"].as_str().unwrap().to_owned();
+    assert!(text.contains("Rates rose") && !text.contains("Secret"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_ai_proposes_map_changes_that_apply_only_when_kept() {
+    let dir = workdir("map-ai");
+    let tool = |index: u32, id: &str, name: &str, input: &str| {
+        format!(
+            "data: {{\"type\":\"content_block_start\",\"index\":{index},\"content_block\":{{\"type\":\"tool_use\",\"id\":\"{id}\",\"name\":\"{name}\",\"input\":{{}}}}}}\n\ndata: {{\"type\":\"content_block_delta\",\"index\":{index},\"delta\":{{\"type\":\"input_json_delta\",\"partial_json\":{}}}}}\n\ndata: {{\"type\":\"content_block_stop\",\"index\":{index}}}\n\n",
+            serde_json::to_string(input).unwrap()
+        )
+    };
+    let mut first = String::from(
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":10,\"output_tokens\":1}}}\n\n",
+    );
+    first += &tool(
+        0,
+        "t1",
+        "propose_node",
+        r#"{"key":"n1","type":"snippet","text":"Kestrels hover over fields.","source":"pdfcraft-doc:i0","reason":"the example"}"#,
+    );
+    first += &tool(1, "t2", "propose_node", r#"{"key":"n2","type":"concept","text":"Hovering","reason":"the idea"}"#);
+    first += &tool(2, "t3", "propose_connection", r#"{"from":"n1","to":"n2","kind":"is an example of","strength":"strong","reason":"it hovers"}"#);
+    first += "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":50}}\n\ndata: {\"type\":\"message_stop\"}\n\n";
+    let second = "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Added the hovering example.\"}}\n\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\ndata: {\"type\":\"message_stop\"}\n\n";
+    let (mut a, canned) = networked(&dir, 200, "", Some("sk-ant-test"));
+    *canned.queue.lock().unwrap() = vec![first, second.to_owned()];
+    ok(&mut a, "graph_create", json!({"map": "m.pdfmap.json"}));
+    let doc = ok(&mut a, "doc_open", json!({"path": "birds.pdf"}))["doc"].clone();
+    let dry = ok(&mut a, "ai_map_edit", json!({"map": "m.pdfmap.json", "request": "Map this page", "doc": doc, "page": 1, "dry_run": true}));
+    assert_eq!(dry["request"]["body"]["tools"].as_array().map(Vec::len), Some(4));
+    let edit = ok(&mut a, "ai_map_edit", json!({"map": "m.pdfmap.json", "request": "Map this page", "doc": doc, "page": 1}));
+    assert_eq!(edit["changes"].as_array().map(Vec::len), Some(3), "{edit}");
+    assert_eq!(edit["summary"], "Added the hovering example.");
+    assert_eq!(ok(&mut a, "graph_show", json!({"map": "m.pdfmap.json"}))["nodes"].as_array().map(Vec::len), Some(0), "nothing applied yet");
+    // Keep the snippet and the connection but not the concept: the connection is skipped.
+    let applied = ok(&mut a, "graph_apply", json!({"map": "m.pdfmap.json", "proposal": edit["proposal"], "accept": [1, 3]}));
+    assert_eq!(applied["nodes"].as_array().map(Vec::len), Some(1));
+    assert_eq!(applied["skipped"][0]["change"], 3);
+    let shown = ok(&mut a, "graph_show", json!({"map": "m.pdfmap.json"}));
+    assert_eq!(shown["nodes"][0]["author"], "assistant");
+    assert_eq!(shown["nodes"][0]["source"]["page"], 1);
     let _ = std::fs::remove_dir_all(&dir);
 }

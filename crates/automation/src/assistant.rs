@@ -34,9 +34,6 @@ pub struct AiNetwork {
     pub key: Arc<dyn Fn() -> Option<Secret> + Send + Sync>,
 }
 
-/// Most of an error response kept to report it.
-const MAX_ERROR_BODY: usize = 64 * 1024;
-
 /// Files and documents one `ai_library_add` takes.
 const MAX_ADD: usize = 1_000;
 
@@ -50,6 +47,12 @@ pub(crate) struct Loaded {
     stamp: Option<Stamp>,
 }
 
+impl Loaded {
+    pub(crate) fn library_entries(&self) -> &[Entry] {
+        self.library.entries()
+    }
+}
+
 type Stamp = (u64, Option<std::time::SystemTime>);
 
 /// The size and modification time of `path`, which the caller resolved (the library file).
@@ -59,7 +62,7 @@ fn stamp_of(path: &std::path::Path) -> Option<Stamp> {
 
 /// Whether a tool only reads the library or also changes it.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Use {
+pub(crate) enum Use {
     Read,
     Change,
 }
@@ -105,7 +108,7 @@ impl Automation {
     /// The library named by `library`, read on first use and again whenever its file changed.
     /// Without `library`, the last library named, or one kept in memory for the session. Reading
     /// a file needs read access to it, and a tool that changes the library write access too.
-    fn library(&mut self, a: &Args, need: Use) -> Result<&mut Library> {
+    pub(crate) fn library(&mut self, a: &Args, need: Use) -> Result<&mut Library> {
         let file = match a.opt_str("library")? {
             Some(p) => {
                 let access = if need == Use::Change { file_access::Access::Write } else { file_access::Access::Read };
@@ -320,32 +323,20 @@ impl Automation {
         let key = (network.key)()
             .ok_or_else(|| failed(format!("no API key: store one in the keychain, or set {}", pdfcraft_platform::assistant::API_KEY_ENV)))?;
         let request = claude::request(&opts, &key, &[], &turn).map_err(failed)?;
-        let mut decoder = claude::Decoder::new(claude::sent_sources(std::slice::from_ref(&turn)));
         let mut events = Vec::new();
-        let mut raw = Vec::new();
-        let status = network
-            .transport
-            .post_stream(&request, &mut |bytes| {
-                if raw.len() < MAX_ERROR_BODY {
-                    raw.extend_from_slice(bytes.get(..MAX_ERROR_BODY.saturating_sub(raw.len())).unwrap_or(bytes));
-                }
-                decoder.push(bytes, &mut events);
-                std::ops::ControlFlow::Continue(())
-            })
-            .map_err(failed)?;
-        if status != 200 {
-            events = vec![claude::error_event(status, &raw)];
-        } else {
-            decoder.finish(&mut events);
-        }
-        let usage = decoder.usage();
+        let reply = claude::send(network.transport.as_ref(), &request, claude::sent_sources(std::slice::from_ref(&turn)), &mut |e| {
+            events.push(e.clone());
+            std::ops::ControlFlow::Continue(())
+        })
+        .map_err(failed)?;
+        let usage = reply.usage;
         let pages = self.doc(a)?.info.pages.len();
         let library = self.ai.as_ref().map(|l| &l.library);
         Ok(json!({
             "sent": true,
             "model": model.id,
             "answer": answer_json(&events, pages, library),
-            "stop_reason": stop_json(decoder.stop_reason()),
+            "stop_reason": stop_json(reply.stop.as_ref()),
             "errors": events.iter().filter_map(|e| match e {
                 Event::ProviderError { kind, message } => Some(json!({"kind": kind, "message": message})),
                 _ => None,

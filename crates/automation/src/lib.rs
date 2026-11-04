@@ -25,6 +25,7 @@ pub mod file_access;
 mod forms;
 mod layers;
 mod links;
+mod maps;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 mod measure;

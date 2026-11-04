@@ -204,6 +204,9 @@ impl PdfCraftApp {
             pdfa: Default::default(),
             compare_old: None,
             compare: None,
+            assistant: Default::default(),
+            ai_service: None,
+            maps: Default::default(),
             js_console: Default::default(),
             doc_js: Default::default(),
             a11y: a11y_ui::A11yState::default(),
@@ -576,6 +579,13 @@ impl eframe::App for PdfCraftApp {
             }
         }
         self.poll_updates();
+        self.poll_assistant();
+        self.poll_map();
+        let (ask, map) = (self.assistant.prefs.enabled, self.maps.available());
+        for view in &mut self.views {
+            view.ask_enabled = ask;
+            view.map_enabled = map;
+        }
         self.poll_print();
         // Shortcuts deferred last frame: the text field has taken that frame's typing since.
         let deferred = std::mem::take(&mut self.deferred_commands);
@@ -675,7 +685,9 @@ impl eframe::App for PdfCraftApp {
         side_panels::show(self, ui);
         let t = theme::Tokens::get(&ctx);
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
-            if self.mode == Mode::AllTools && self.all_tools_full {
+            if self.maps.open {
+                map_ui::workspace(self, ui);
+            } else if self.mode == Mode::AllTools && self.all_tools_full {
                 all_tools_ui::show(self, ui);
             } else {
                 match self.active {

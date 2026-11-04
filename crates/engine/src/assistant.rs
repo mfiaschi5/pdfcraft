@@ -133,6 +133,11 @@ impl Session {
         })
     }
 
+    /// An open document's title, or its file name: what citations and map snippets call it.
+    pub fn document_title(&self, id: DocId) -> Option<String> {
+        self.get(id).map(|d| title_of(&d.info, &d.name))
+    }
+
     /// The SHA-256 of an open document's working file, by which the library knows it.
     pub fn document_sha256(&self, id: DocId) -> Option<Sha256> {
         self.get(id).map(|d| Sha256::of(&d.bytes))
@@ -184,12 +189,13 @@ pub fn library_document_from_file(path: &str, name: &str, bytes: Arc<Vec<u8>>, a
 }
 
 /// The passages a question about `ctx` sends from the document being read: the selection, then
-/// the text around it.
+/// the text around it (or the whole page, when that is what was chosen).
 pub fn context_passages(ctx: &SelectionContext) -> Vec<Passage> {
     let id = SourceId::ThisDocument { page: ctx.page };
     let mut out = Vec::new();
     if !ctx.text.trim().is_empty() {
-        out.push(Passage { id, title: format!("{}, page {} (the selection)", ctx.title, ctx.page_label), text: ctx.text.clone() });
+        let what = if ctx.surrounding.is_empty() { "the page" } else { "the selection" };
+        out.push(Passage { id, title: format!("{}, page {} ({what})", ctx.title, ctx.page_label), text: ctx.text.clone() });
     }
     if !ctx.surrounding.trim().is_empty() && ctx.surrounding.trim() != ctx.text.trim() {
         out.push(Passage { id, title: format!("{}, page {} (around the selection)", ctx.title, ctx.page_label), text: ctx.surrounding.clone() });

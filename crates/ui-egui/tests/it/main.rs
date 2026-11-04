@@ -20,6 +20,7 @@ fn gpu() -> std::sync::MutexGuard<'static, ()> {
 mod accessibility;
 mod actions;
 mod animate;
+mod assistant;
 mod attach_picker_target;
 mod attachment_row;
 mod bookmark_position;
@@ -50,6 +51,7 @@ mod identity;
 mod javascript;
 mod layer_actions;
 mod links;
+mod maps;
 mod marks;
 mod object_selection;
 mod ocr;

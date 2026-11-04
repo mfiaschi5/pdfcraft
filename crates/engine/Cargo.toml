@@ -23,6 +23,9 @@ pdfcraft-content = { workspace = true }
 pdfcraft-audit = { workspace = true }
 # The AI assistant's core: what `assistant` hands to it (no network).
 pdfcraft-ai = { workspace = true }
+# Concept maps, and the AI's proposals for them (`map_assist`).
+pdfcraft-graph = { workspace = true }
+serde_json = { workspace = true }
 pdfcraft-redact = { workspace = true }
 pdfcraft-print = { workspace = true }
 pdfcraft-xfdf = { workspace = true }

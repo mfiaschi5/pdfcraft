@@ -417,6 +417,8 @@ fn app_creator<'a>(
         }
         app.set_startup_update_check(true);
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
+        app.ai_service = Some(ai_service());
+        app.maps.dir = pdfcraft_ui_egui::maps_dir();
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
         #[cfg(target_os = "macos")]
         {
@@ -795,3 +797,22 @@ fn pick_adapter(adapters: &[(u32, u32, eframe::wgpu::DeviceType)], displays: &[D
 
 #[cfg(test)]
 mod tests;
+
+/// The AI assistant's transport and key store. Nothing is sent until the user turns the
+/// assistant on, adds a key and asks. The key is kept in the keychain where there is one (not in
+/// portable mode, which leaves nothing on the machine), otherwise for the session only.
+fn ai_service() -> pdfcraft_ui_egui::AiService {
+    use pdfcraft_platform::assistant::{HttpsTransport, Keychain, SecretStore, SessionKeys};
+    let keys: std::sync::Arc<dyn SecretStore> = if Keychain::available() && pdfcraft_ui_egui::portable::data_dir().is_none() {
+        std::sync::Arc::new(Keychain)
+    } else {
+        std::sync::Arc::new(SessionKeys::default())
+    };
+    pdfcraft_ui_egui::AiService {
+        transport: std::sync::Arc::new(HttpsTransport::new(&format!("PdfCraft/{}", env!("CARGO_PKG_VERSION")))),
+        keys,
+        env_key: std::sync::Arc::new(|| {
+            std::env::var(pdfcraft_platform::assistant::API_KEY_ENV).ok().map(|k| pdfcraft_ai::transport::Secret::new(k.trim()))
+        }),
+    }
+}

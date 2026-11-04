@@ -71,6 +71,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("print", Class::Layer(4)),
     ("media", Class::Layer(4)),
     ("ai", Class::Layer(4)),
+    ("graph", Class::Layer(4)),
     // L5 interaction
     ("viewport", Class::Layer(5)),
     ("tools", Class::Layer(5)),
