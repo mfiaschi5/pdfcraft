@@ -1,0 +1,4 @@
+Label = "Concept map"
+Label = "0"
+Button "Close" [off]
+Label = "Concept maps need the desktop app"

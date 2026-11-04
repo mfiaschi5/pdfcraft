@@ -78,6 +78,7 @@ const PANELS: &[(RightPanel, &str, &str)] = &[
     (RightPanel::Search, "search", "Search"),
     (RightPanel::Compare, "compare", "Compare"),
     (RightPanel::Assistant, "assistant", "AI assistant"),
+    (RightPanel::Map, "map", "Concept map"),
 ];
 
 /// The English titles of the menus and submenus, for the bar's mnemonics in languages whose

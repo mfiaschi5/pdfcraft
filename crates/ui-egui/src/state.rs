@@ -54,6 +54,8 @@ pub enum RightPanel {
     Compare,
     /// The AI assistant: questions about the document, answers that cite its pages.
     Assistant,
+    /// The concept map beside the document: add the selection and connect it while reading.
+    Map,
 }
 
 /// Quick-action bar tools (the vertical floating strip).

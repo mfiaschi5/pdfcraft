@@ -70,6 +70,7 @@ impl PdfCraftApp {
                     "search" => Some(RightPanel::Search),
                     "compare" => Some(RightPanel::Compare),
                     "assistant" => Some(RightPanel::Assistant),
+                    "map" => Some(RightPanel::Map),
                     "none" => None,
                     other => return Err(format!("unknown panel {other}")),
                 }

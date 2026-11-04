@@ -743,6 +743,10 @@ impl PdfCraftApp {
                 self.refresh_key_status();
             }
             "map.open" => self.open_map_workspace(),
+            "map.add_selection" => match active {
+                Some(i) => self.add_selection_to_map(i),
+                None => return Some(false),
+            },
             "a11y.reading_options" => self.dialog = Some(Dialog::Properties(crate::PropsTab::Advanced)),
             "redact.mark" => {
                 self.quick_tool = crate::QuickTool::Redact;

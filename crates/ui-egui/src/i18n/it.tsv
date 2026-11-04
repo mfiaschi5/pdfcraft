@@ -3005,3 +3005,19 @@ certificate	SHA-256 digest	Impronta SHA-256
 	Add kind of connection	Aggiungi tipo di collegamento
 	Export map	Esporta mappa
 	Another map was opened, so the assistant's proposal was dropped.	È stata aperta un'altra mappa, quindi la proposta dell'assistente è stata scartata.
+	Picture: {alt}	Immagine: {alt}
+	Whole map	Mappa intera
+	Show the whole map instead of the document	Mostra la mappa intera al posto del documento
+	Add the selected text to the map ({key})	Aggiungi il testo selezionato alla mappa ({key})
+	Add the selection	Aggiungi la selezione
+	Select text to add it, or right-click a picture.	Seleziona del testo per aggiungerlo, oppure fai clic destro su un'immagine.
+	Add a snippet, or pick a node below, to connect it to others.	Aggiungi un estratto, o scegli un nodo qui sotto, per collegarlo ad altri.
+	On the map from this page	Sulla mappa da questa pagina
+	Nothing yet.	Ancora niente.
+	Stop connecting this node	Smetti di collegare questo nodo
+	Go to the source	Vai alla fonte
+	Find a node to connect to	Cerca un nodo da collegare
+	Connect to: {node}	Collega a: {node}
+	Nothing else on the map yet.	Sulla mappa non c'è ancora altro.
+	No node has those words.	Nessun nodo contiene quelle parole.
+	Add selection to map	Aggiungi la selezione alla mappa

@@ -592,6 +592,9 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if app.assistant.prefs.enabled {
         items.push(item(RightPanel::Assistant, "sparkles", "AI assistant", None));
     }
+    if app.maps.available() {
+        items.push(item(RightPanel::Map, "share-2", "Concept map", None));
+    }
     let view = &mut app.views[index];
     let mut page_display = None;
     let rail = Rail::new(egui::Id::unique("rail"))

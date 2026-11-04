@@ -23,6 +23,13 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let mut a11y_action: Option<crate::a11y_ui::PanelAction> = None;
     let mut compare_action: Option<crate::compare_ui::PanelAction> = None;
     let mut assistant_action: Option<crate::assistant_ui::PanelAction> = None;
+    let mut map_actions: Vec<crate::map_ui::Action> = Vec::new();
+    let here = crate::map_ui::Here {
+        sha256: app.session.document_sha256(id).map(|h| h.to_hex()),
+        path: app.session.get(id).and_then(|d| d.path.clone()),
+        page: app.views.get(index).map_or(0, |v| v.current),
+        can_add: app.session.get(id).is_some_and(|d| d.allows_copying()) && app.views.get(index).is_some_and(|v| v.assistant_selection().is_some()),
+    };
     let has_ai_service = app.ai_service.is_some();
     let mut bm_rename = app.bookmark_rename.clone();
     let bm_editable = app.session.get(id).is_some_and(|d| d.allows_assembly() && d.read_only_reason.is_none());
@@ -38,6 +45,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         let tags_state = &mut app.tags_state;
         let compare = &app.compare;
         let assistant = &mut app.assistant;
+        let maps = &mut app.maps;
         let comment_allowed = doc.allows_annotation();
         // A dialog or the palette owns the keyboard: the panel leaves Escape to it.
         let modal = app.dialog.is_some() || app.palette_open;
@@ -59,6 +67,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     RightPanel::Search => ("Search", None),
                     RightPanel::Compare => ("Compare", compare.as_ref().filter(|c| c.new == id).map(|c| c.result.changes.len())),
                     RightPanel::Assistant => ("AI assistant", None),
+                    RightPanel::Map => ("Concept map", Some(maps.graph.nodes().len())),
                 };
                 // Comments count like Acrobat (no replies); the replies go in small text below.
                 let replies = if panel == RightPanel::Comments { crate::comments_panel::reply_count(info) } else { 0 };
@@ -278,6 +287,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     RightPanel::Search => crate::search_ui::panel(ui, &t, view, info.pages.len()),
                     RightPanel::Compare => compare_action = crate::compare_ui::panel(ui, &t, compare, id),
                     RightPanel::Assistant => assistant_action = crate::assistant_ui::panel(ui, &t, assistant, id, info.pages.len(), has_ai_service),
+                    RightPanel::Map => map_actions = crate::map_ui::panel(ui, &t, maps, &here),
                     RightPanel::Attachments => {
                         let attachable = doc.allows_modification() && doc.read_only_reason.is_none();
                         if attachable {
@@ -399,6 +409,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if let Some(a) = assistant_action {
         app.assistant_action(index, a);
     }
+    crate::map_ui::run_panel(app, map_actions);
     match sig_action {
         Some(crate::sign_ui::PanelAction::Validate) => app.run_command("sign.validate"),
         Some(crate::sign_ui::PanelAction::GoTo(p)) => app.views[index].go_to_page(p),
