@@ -595,6 +595,10 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if app.maps.available() {
         items.push(item(RightPanel::Map, "share-2", "Concept map", None));
     }
+    // The wiki is a folder of files: the desktop app's.
+    if !cfg!(target_arch = "wasm32") {
+        items.push(item(RightPanel::Wiki, "book-open", "Wiki", None));
+    }
     let view = &mut app.views[index];
     let mut page_display = None;
     let rail = Rail::new(egui::Id::unique("rail"))

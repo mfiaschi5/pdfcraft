@@ -155,6 +155,10 @@ impl PdfCraftApp {
         v["print_paper"] = serde_json::json!(pdfcraft_engine::print::PAPERS.get(self.print_draft.paper).map(|(name, _)| *name));
         // Preferences ▸ AI assistant. The API key is never here: it is in the keychain.
         v["assistant"] = serde_json::to_value(&self.assistant.prefs).unwrap_or_default();
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(folder) = self.drive.last.as_ref().and_then(|p| p.to_str()) {
+            v["drive_folder"] = serde_json::json!(folder);
+        }
         v.to_string()
     }
 
@@ -172,6 +176,10 @@ impl PdfCraftApp {
             // A model this build doesn't offer falls back to the default.
             prefs.model = prefs.model().id.to_owned();
             self.assistant.prefs = prefs;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(folder) = v.get("drive_folder").and_then(serde_json::Value::as_str) {
+            self.drive.last = Some(std::path::PathBuf::from(folder));
         }
         let panels = side_panels::restore(&v);
         self.side_panels = panels.panels;

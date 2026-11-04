@@ -71,6 +71,7 @@ impl PdfCraftApp {
                     "compare" => Some(RightPanel::Compare),
                     "assistant" => Some(RightPanel::Assistant),
                     "map" => Some(RightPanel::Map),
+                    "wiki" => Some(RightPanel::Wiki),
                     "none" => None,
                     other => return Err(format!("unknown panel {other}")),
                 }
@@ -117,6 +118,7 @@ impl PdfCraftApp {
                     "background" => Some(Dialog::Marks(pdfcraft_engine::MarkKind::Background)),
                     "export-image" => Some(Dialog::Export(export_ui::ExportKind::Image)),
                     "word-count" => Some(Dialog::WordCount),
+                    "save-to-drive" => Some(Dialog::SaveToDrive),
                     "export-text" => Some(Dialog::Export(export_ui::ExportKind::Text)),
                     "export-all-images" => Some(Dialog::Export(export_ui::ExportKind::AllImages)),
                     "accessibility-options" => Some(Dialog::AccessibilityOptions),

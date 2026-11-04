@@ -614,6 +614,7 @@ fn card_assistant(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mu
         .response
         .labelled_by(label.id);
     ctx.checkbox(ui, &mut app.assistant.prefs.preview, tl!("Show what will be sent before each question"), t);
+    wiki_row(ui, app, t, ctx);
     if app.assistant.prefs.provider == Provider::ClaudeCode {
         card_claude_code(ui, app, t, ctx);
         return;
@@ -644,6 +645,23 @@ fn card_assistant(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mu
     }
     if remove {
         app.remove_assistant_key();
+    }
+}
+
+/// The wiki: whether answers read it, and where it is kept.
+fn wiki_row(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mut PrefSearchContext) {
+    ctx.checkbox(ui, &mut app.assistant.prefs.use_wiki, tl!("Answers read the wiki's pages about the question"), t);
+    let shown = app.wiki_folder().map_or_else(
+        || tl!("The wiki's folder isn't chosen yet (the Wiki panel offers where to keep it).").to_owned(),
+        |f| crate::i18n::fmt(tl!("Wiki folder: {path}"), &[("path", &f.to_string_lossy())]),
+    );
+    let mut change = false;
+    ui.horizontal(|ui| {
+        ctx.label_secondary(ui, &shown, t);
+        change = ui.small_button(tl!("Change…")).clicked();
+    });
+    if change {
+        crate::wiki_ui::choose_folder(app);
     }
 }
 

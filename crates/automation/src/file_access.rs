@@ -400,6 +400,8 @@ mod tests {
             "read_input",
             "read_input_bytes",
             "read_review_sidecar",
+            // Concept maps: every caller takes the path from `map_file`, which resolves it.
+            "load_map",
             "process",
             "linked",
             "walk",

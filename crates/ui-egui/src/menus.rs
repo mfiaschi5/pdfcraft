@@ -79,6 +79,7 @@ const PANELS: &[(RightPanel, &str, &str)] = &[
     (RightPanel::Compare, "compare", "Compare"),
     (RightPanel::Assistant, "assistant", "AI assistant"),
     (RightPanel::Map, "map", "Concept map"),
+    (RightPanel::Wiki, "wiki", "Wiki"),
 ];
 
 /// The English titles of the menus and submenus, for the bar's mnemonics in languages whose
@@ -118,6 +119,7 @@ const FILE: &[&str] = &[
     SEP,
     "file.save",
     "file.save_as",
+    "file.save_to_drive",
     "file.revert",
     SEP,
     "file.close",

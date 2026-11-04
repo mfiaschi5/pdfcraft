@@ -4435,6 +4435,7 @@ dependencies = [
  "pdfcraft-render",
  "pdfcraft-sign",
  "pdfcraft-testkit",
+ "pdfcraft-wiki",
  "pdfcraft-xfa",
  "pdfcraft-xfdf",
  "png 0.18.1",
@@ -4722,6 +4723,7 @@ dependencies = [
  "pdfcraft-model",
  "pdfcraft-platform",
  "pdfcraft-render",
+ "pdfcraft-wiki",
  "pdfcraft-xfa",
  "plist",
  "png 0.18.1",
@@ -4753,6 +4755,13 @@ dependencies = [
  "pdfcraft-ui-egui",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "pdfcraft-wiki"
+version = "0.18.0"
+dependencies = [
+ "proptest",
 ]
 
 [[package]]

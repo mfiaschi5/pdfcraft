@@ -3038,3 +3038,97 @@ certificate	SHA-256 digest	Impronta SHA-256
 	To sign in, paste the command into Terminal and follow it in your browser. Web search isn't available this way.	Per accedere, incolla il comando nel Terminale e segui i passaggi nel browser. In questo modo la ricerca web non è disponibile.
 	For your own use: Anthropic asks apps to use API keys, and lets you sign in to the unmodified Claude Code program with your own subscription. PdfCraft runs that program, with its tools and add-ons turned off, and never reads its sign-in.	Solo per uso personale: Anthropic chiede alle app di usare le chiavi API e ti consente di accedere al programma Claude Code originale con il tuo abbonamento. PdfCraft avvia quel programma, con strumenti ed estensioni disattivati, e non legge mai le sue credenziali.
 	Sign-in command copied	Comando di accesso copiato
+	A name can't contain {c}.	Un nome non può contenere {c}.
+	Couldn't make the folder: {e}	Impossibile creare la cartella: {e}
+	Couldn't open this folder: {e}	Impossibile aprire questa cartella: {e}
+	Folder name	Nome della cartella
+	Google Drive	Google Drive
+	Google Drive for desktop isn't set up on this computer. Install it and sign in to your Google account; its folders then show here, and what you save in them is uploaded.	Google Drive per desktop non è configurato su questo computer. Installalo e accedi con il tuo account Google: le sue cartelle compariranno qui e ciò che salvi al loro interno verrà caricato.
+	Loading…	Caricamento…
+	New folder	Nuova cartella
+	No folders here	Nessuna cartella qui
+	Other location…	Altra posizione…
+	PdfCraft isn't allowed to open this Drive yet. Allow it when macOS asks, or in System Settings > Privacy & Security > Files and Folders; or use Other location… to choose the folder in the system's dialog.	PdfCraft non ha ancora il permesso di aprire questo Drive. Consentilo quando macOS lo chiede, oppure in Impostazioni di Sistema > Privacy e sicurezza > File e cartelle; o usa Altra posizione… per scegliere la cartella nella finestra di sistema.
+	Save to Google Drive	Salva su Google Drive
+	That name can't be used for a file in Drive.	Questo nome non si può usare per un file su Drive.
+	That name is too long.	Questo nome è troppo lungo.
+	There is already a folder with that name.	Esiste già una cartella con questo nome.
+	This folder isn't there any more.	Questa cartella non esiste più.
+	Try again	Riprova
+	Type a name.	Scrivi un nome.
+	couldn't start listing the folder	impossibile avviare l'elenco della cartella
+	listing stopped unexpectedly	l'elenco si è interrotto inaspettatamente
+	{name} is already in this folder. Replace it?	{name} è già in questa cartella. Vuoi sostituirlo?
+	Save to Google Drive…	Salva su Google Drive…
+	Saving to Google Drive needs the desktop app, with Google Drive for desktop.	Il salvataggio su Google Drive richiede l'app desktop e Google Drive per desktop.
+	Snippets	Snippet
+	Related	Collegata a
+	Reading the wiki stopped unexpectedly.	La lettura del wiki si è interrotta inaspettatamente.
+	not a page's file name	non è il nome di file di una pagina
+	a file of that name is already there	c'è già un file con quel nome
+	PdfCraft keeps this page up to date; changes made here are replaced.	PdfCraft tiene aggiornata questa pagina; le modifiche fatte qui vengono sostituite.
+	Log	Registro
+	new page	nuova pagina
+	changed	modificata
+	snippet added	snippet aggiunto
+	assistant's changes	modifiche dell'assistente
+	Choose the wiki's folder	Scegli la cartella del wiki
+	Change…	Cambia…
+	The wiki's folder couldn't be read: {e}	Impossibile leggere la cartella del wiki: {e}
+	Reading the wiki…	Lettura del wiki…
+	Your wiki is a folder of Markdown pages, one per topic, with snippets from your PDFs and links between pages. The AI assistant reads it when it answers, and proposes what to add; you choose what is kept.	Il tuo wiki è una cartella di pagine Markdown, una per argomento, con snippet dai tuoi PDF e collegamenti tra le pagine. L'assistente IA lo legge quando risponde e propone cosa aggiungere; sei tu a scegliere cosa tenere.
+	Keep it on Google Drive	Tienilo su Google Drive
+	Choose a folder…	Scegli una cartella…
+	Keep it on this computer	Tienilo su questo computer
+	Other editors, such as Obsidian, can open the same folder.	Anche altri editor, come Obsidian, possono aprire la stessa cartella.
+	Find a page	Trova una pagina
+	Add the selection to a page	Aggiungi la selezione a una pagina
+	No pages yet. Add a selection, or ask the assistant to start from the page you are reading.	Ancora nessuna pagina. Aggiungi una selezione, oppure chiedi all'assistente di partire dalla pagina che stai leggendo.
+	Find a page, or type a new one's title	Trova una pagina, o scrivi il titolo di una nuova
+	New page “{title}”	Nuova pagina «{title}»
+	Type the new page's title.	Scrivi il titolo della nuova pagina.
+	< All pages	< Tutte le pagine
+	This page is too large to show here.	Questa pagina è troppo grande per essere mostrata qui.
+	Linked from	Collegata da
+	{title}, page {n}	{title}, pagina {n}
+	Open the document at this page	Apri il documento a questa pagina
+	The assistant proposes	L'assistente propone
+	Apply {n}	Applica {n}
+	New page “{page}”: {text}	Nuova pagina «{page}»: {text}
+	On “{page}”, quote {source}: “{quote}”	Su «{page}», cita {source}: «{quote}»
+	Link “{page}” to “{to}”	Collega «{page}» a «{to}»
+	On “{page}”, add: {text}	Su «{page}», aggiungi: {text}
+	On “{page}”, replace “{old}” with “{new}”	Su «{page}», sostituisci «{old}» con «{new}»
+	The assistant is working on the wiki…	L'assistente sta lavorando sul wiki…
+	Ask the assistant to update the wiki	Chiedi all'assistente di aggiornare il wiki
+	From this page	Da questa pagina
+	Check the wiki	Controlla il wiki
+	Undo last changes	Annulla le ultime modifiche
+	Answers read the wiki's pages about the question	Le risposte leggono le pagine del wiki pertinenti alla domanda
+	The wiki's folder isn't chosen yet (the Wiki panel offers where to keep it).	La cartella del wiki non è ancora scelta (il pannello Wiki propone dove tenerla).
+	Wiki folder: {path}	Cartella del wiki: {path}
+	Save to wiki	Salva nel wiki
+	The assistant proposes where the answer goes in your wiki	L'assistente propone dove mettere la risposta nel tuo wiki
+	Your wiki	Il tuo wiki
+	your wiki	il tuo wiki
+	Add selection to wiki	Aggiungi la selezione al wiki
+	Wiki	Wiki
+	Added to the wiki page “{page}”	Aggiunto alla pagina del wiki «{page}»
+	Choose where to keep the wiki first.	Prima scegli dove tenere il wiki.
+	Couldn't read the wiki: {e}	Impossibile leggere il wiki: {e}
+	Couldn't use that folder for the wiki: {e}	Impossibile usare quella cartella per il wiki: {e}
+	Google Drive couldn't be read; choose the folder yourself.	Impossibile leggere Google Drive; scegli tu la cartella.
+	Google Drive for desktop isn't set up on this computer.	Google Drive per desktop non è configurato su questo computer.
+	My Drive wasn't found in Google Drive; choose the folder yourself.	Il mio Drive non è stato trovato in Google Drive; scegli tu la cartella.
+	PdfCraft isn't allowed to open Google Drive yet. Allow it when macOS asks, or choose the folder yourself.	PdfCraft non ha ancora il permesso di aprire Google Drive. Consentilo quando macOS lo chiede, oppure scegli tu la cartella.
+	That document isn't open, and the wiki doesn't say where it is.	Quel documento non è aperto e il wiki non dice dove si trova.
+	That wiki page isn't there any more.	Quella pagina del wiki non esiste più.
+	The assistant proposed no changes to the wiki.	L'assistente non ha proposto modifiche al wiki.
+	The assistant proposed no changes to the wiki: {why}	L'assistente non ha proposto modifiche al wiki: {why}
+	The wiki is still being read; try again in a moment.	Il wiki è ancora in lettura; riprova tra un momento.
+	The wiki needs the desktop app	Il wiki richiede l'app desktop
+	The wiki's last changes were undone.	Le ultime modifiche al wiki sono state annullate.
+	There is no wiki page “{page}” yet.	Non c'è ancora una pagina del wiki «{page}».
+	{n} changes couldn't be made: {first}	{n} modifiche non sono state fatte: {first}
+	{n} changes made to the wiki	{n} modifiche fatte al wiki
+	{n} pages changed since, so they were left as they are.	{n} pagine sono cambiate nel frattempo, quindi sono state lasciate com'erano.

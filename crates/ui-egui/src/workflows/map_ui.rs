@@ -496,6 +496,8 @@ impl PdfCraftApp {
                         let (_, paths, title) = entries.iter().find(|(h, ..)| *h == hex)?.clone();
                         Some(Anchor { sha256: hex, paths, title, page, rect: None, quote })
                     }
+                    // A map snippet quotes a document, not the wiki.
+                    SourceId::Wiki { .. } => None,
                 }
             };
             let req = EditRequest {

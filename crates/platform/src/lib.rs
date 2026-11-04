@@ -5,4 +5,6 @@
 
 pub mod assistant;
 pub mod desktop_theme;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod drive;
 pub mod staging;

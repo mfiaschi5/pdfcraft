@@ -164,7 +164,7 @@ fn check(h: &Harness<'static, PdfCraftApp>, name: &str) -> Result<(), String> {
 }
 
 /// Every panel, in the order of the rail.
-const ALL: [RightPanel; 13] = [
+const ALL: [RightPanel; 14] = [
     RightPanel::Comments,
     RightPanel::Bookmarks,
     RightPanel::Pages,
@@ -178,6 +178,7 @@ const ALL: [RightPanel; 13] = [
     RightPanel::Compare,
     RightPanel::Assistant,
     RightPanel::Map,
+    RightPanel::Wiki,
 ];
 
 /// Opens `p` with something in it and names its snapshot. No wildcard on purpose: a new
@@ -196,6 +197,8 @@ fn open(p: RightPanel) -> (Harness<'static, PdfCraftApp>, &'static str) {
         RightPanel::Assistant => "assistant",
         // No folder for maps in tests: the panel says what it needs (tests/it/maps.rs drives it).
         RightPanel::Map => "map",
+        // No folder chosen in tests: the panel offers where to keep it (tests/it/wiki.rs drives it).
+        RightPanel::Wiki => "wiki",
         RightPanel::Accessibility => {
             let mut h = harness("none");
             assert!(h.state_mut().execute("a11y.check"));

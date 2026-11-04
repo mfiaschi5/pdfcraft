@@ -66,6 +66,9 @@ struct Pending {
     images_now: bool,
     stamp_now: bool,
     alt_now: bool,
+    /// Where Save to Google Drive chose to save.
+    #[cfg(not(target_arch = "wasm32"))]
+    drive: Option<crate::drive_ui::Chosen>,
     close: bool,
     /// The dialog to switch to, when a widget asked for another one.
     next: Option<Dialog>,
@@ -96,6 +99,10 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     if app.dialog != Some(Dialog::FieldTable) {
         app.field_table_draft = None;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if app.dialog != Some(Dialog::SaveToDrive) {
+        app.drive.draft = None;
     }
     // A movable window, not this modal: the page under it shows the table as it changes.
     if app.dialog == Some(Dialog::FieldTable) {
@@ -149,6 +156,17 @@ fn dialog_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, dialog: Dialog, req: &m
     match dialog {
         Dialog::WordCount => {
             req.close = crate::word_count_ui::body(ui, app);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        Dialog::SaveToDrive => {
+            (req.drive, req.close) = crate::drive_ui::body(ui, app);
+            return false;
+        }
+        // The web app has no Drive for desktop; its command never opens this.
+        #[cfg(target_arch = "wasm32")]
+        Dialog::SaveToDrive => {
+            req.close = true;
+            return false;
         }
         Dialog::CreateImages => {
             let (go, cancel) = crate::create_ui::image_import_body(ui, app);
@@ -1983,6 +2001,11 @@ fn finish_close(app: &mut PdfCraftApp, dialog: Dialog, modal_closed: bool, req: 
     }
     if req.alt_now {
         app.save_alt_text();
+    }
+    // After the dialog has closed: saving may ask whether to write over a changed file.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(chosen) = req.drive.take() {
+        app.finish_save_to_drive(chosen);
     }
     if req.stamp_now {
         app.save_custom_stamp();

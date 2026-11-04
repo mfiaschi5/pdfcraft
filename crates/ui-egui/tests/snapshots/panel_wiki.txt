@@ -1,0 +1,6 @@
+Label = "Wiki"
+Button "Close" [off]
+Label = "Your wiki is a folder of Markdown pages, one per topic, with snippets from your PDFs and links between pages. The AI assistant reads it when it answers, and proposes what to add; you choose what is kept."
+Button "Choose a folder…"
+Button "Keep it on this computer"
+Label = "Other editors, such as Obsidian, can open the same folder."

@@ -9723,6 +9723,30 @@ evidence = ["crates/automation/tests/it/ai_assistant.rs::concept_maps_are_built_
 notes = "Beyond Acrobat. While reading, the Concept map panel (a rail button) sits beside the document: Add the selection (⇧⌘M) puts the snippet on the map and opens it there, ready to connect to a node found by its words, with the kind and strength chosen, in one click and without leaving the page; the node's connections lead on to their sources, and the panel lists what is on the map from the page being read. View ▸ Concept map (or Whole map) shows the whole map in the document area. Add to map (the selection bar) and Add Image to Map (a picture's menu) take a snippet with its document, page and quote, following the assistant's rules (nothing from a copy-forbidden document, nothing under unapplied redaction marks); notes and concepts are typed in. Nine kinds of connection (supports, contradicts, is an example of…) plus the user's own, each weak, medium or strong. A node's source opens its document at the page, by its SHA-256 even after the file moved. Drag to arrange or connect, Tidy up (force-directed), its own undo, export to JSON Canvas (Obsidian) and GraphML; headless also import from JSON Canvas. Maps are .pdfmap.json files in the app's data folder, written atomically. Missing: pictures drawn on the map (shown by their description), editing a node's text in place, renaming a kind, search, keyboard navigation between nodes, more than one map open at once."
 
 [[feature]]
+id = "misc.drive-save"
+title = "Save to Google Drive, into a folder chosen in the app"
+area = "N"
+tier = "P3"
+milestone = "M13"
+status = "partial"
+commands = ["file.save_to_drive"]
+tools = []
+evidence = ["crates/ui-egui/tests/it/drive.rs::a_document_is_saved_into_a_drive_folder_and_the_folder_is_remembered", "crates/ui-egui/tests/it/drive.rs::names_that_could_leave_the_folder_are_refused", "crates/ui-egui/tests/it/drive.rs::without_drive_or_permission_the_dialog_says_what_to_do", "crates/platform/src/drive/tests.rs::accounts_and_their_places_are_found_where_drive_for_desktop_keeps_them"]
+notes = "Beyond Acrobat (which saves to its own cloud). File ▸ Save to Google Drive… lists the Google accounts that Google Drive for desktop syncs on this computer, opens in My Drive (named in the system's language) or in the folder last saved to, goes into folders and makes new ones, and saves the document there as Save As would; Drive uploads it. PdfCraft never signs in to Google and adds no network code. Names that could leave the folder or break a synced copy are refused. When macOS hasn't yet allowed PdfCraft to read a Drive, the dialog says how to allow it and offers the system's own Save dialog in that folder. Missing: Windows (Drive's drive letter is looked for but not tried on a Windows machine), opening from Drive inside the app (the system's Open dialog reaches it), files that are online-only (opened through the system), the web build, and a headless automation tool."
+
+[[feature]]
+id = "misc.llm-wiki"
+title = "LLM wiki: Markdown pages of notes with snippets from PDFs, read by the assistant and updated through reviewed proposals"
+area = "N"
+tier = "P3"
+milestone = "M13"
+status = "partial"
+commands = ["wiki.add_selection"]
+tools = []
+evidence = ["crates/ui-egui/tests/it/wiki.rs::the_wiki_goes_on_google_drive_and_its_pages_lead_to_each_other_and_their_sources", "crates/ui-egui/tests/it/wiki.rs::a_selection_goes_on_a_page_and_the_last_change_is_undone", "crates/ui-egui/tests/it/wiki.rs::the_assistants_proposal_changes_only_what_is_kept", "crates/ui-egui/tests/it/wiki.rs::answers_read_the_wiki_and_a_citation_of_it_opens_the_page", "crates/ui-egui/tests/it/wiki.rs::undo_leaves_a_page_that_changed_since_as_it_is", "crates/ui-egui/tests/it/wiki.rs::an_index_page_of_ones_own_is_never_written_over", "crates/wiki/src/tests.rs::changes_land_in_their_sections_and_keep_the_rest_of_the_page", "crates/wiki/src/tests.rs::replacements_are_exact_and_never_change_a_snippet", "crates/engine/src/wiki_assist/tests.rs::calls_become_checked_proposals_that_later_calls_build_on"]
+notes = "Beyond Acrobat. The wiki is a folder of Markdown pages, one per topic, chosen in the Wiki panel: on Google Drive (My Drive/PdfCraft Wiki, through Google Drive for desktop, so it syncs), in a folder of one's own, or on this computer; Obsidian and other editors can open the same folder, and their edits are read back. A page's snippets quote a PDF and link back to its document (by SHA-256) and page, and [[links]] join pages; the panel lists, finds and shows pages, with their sources and the pages linking to them. Add selection to wiki (⇧⌘K) puts the selection on a page, or on a new one, following the assistant's rules. Answers read the wiki's pages about the question as passages they can cite (Preferences ▸ AI assistant can turn this off), and a citation of the wiki opens the page. The assistant proposes changes (new pages, snippets quoted word for word from passages sent, links, paragraphs, exact replacements that never change a snippet) from the page being read, a request, an answer (Save to wiki), or a check of the whole wiki; each call is checked against the wiki as it would be, and refused calls go back with the reason. Only the changes kept are written, to the pages as they are on disk then, atomically, with index.md (one PdfCraft wrote; an index of the user's own is left alone) and log.md (only added to) kept up to date; the last batch can be undone where the pages haven't changed since. Missing: subfolders of the wiki, renaming or deleting pages in the app, editing a page's text in the app (another editor does it), the pdfcraft:// link opening PdfCraft from another editor, search by meaning rather than by words, the web build, and headless automation tools."
+
+[[feature]]
 id = "misc.ai-graph-edit"
 title = "The AI assistant edits a concept map on request, as a proposal the user reviews"
 area = "N"

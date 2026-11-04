@@ -82,6 +82,7 @@ family (`sign`, `sign_with_timestamp`, `timestamp_document`, `embed_ltv`).
 | `xfa`, `ocr`, `compare`, `export` | Façades over the L3/L4 crates of the same names |
 | `assistant` | What a question to the AI assistant may send: a selection's text and the page around it, without text under unapplied redaction marks, refused when the document forbids copying. Also the library's view of a PDF (read without a password, or from an open copy). It builds the passages `pdfcraft-ai` sends; nothing is sent from here |
 | `map_assist` | The AI's side of a concept map edit: the map and passages as the first turn, four proposal tools (node, connection, rewording, removal), and the tool loop over a `Transport`, bounded in rounds. A proposed snippet must quote a passage that was sent; nothing is applied here (`pdfcraft-graph`'s `Proposal::apply` does that, with the changes the user keeps) |
+| `wiki_assist` | The AI and the wiki (`pdfcraft-wiki`): `WikiIndex` searches the pages (BM25, through the library's index) for the passages a question sends, and the tool loop turns five proposal tools (page, snippet, link, text, replacement) into a `Proposal`. Each call is applied to a scratch copy of the wiki, so one that wouldn't apply goes back to the model with the reason, and later calls see the pages proposed before them. A snippet must quote a document passage that was sent, never a wiki page; nothing is written here |
 
 ## Not done here
 

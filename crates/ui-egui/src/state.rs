@@ -56,6 +56,8 @@ pub enum RightPanel {
     Assistant,
     /// The concept map beside the document: add the selection and connect it while reading.
     Map,
+    /// The wiki beside the document: pages of notes with snippets, kept in a folder.
+    Wiki,
 }
 
 /// Quick-action bar tools (the vertical floating strip).
@@ -192,6 +194,8 @@ pub enum Dialog {
     CertificateViewer,
     /// Pin tools to Home: selection modal.
     PinTool,
+    /// File ▸ Save to Google Drive (desktop only).
+    SaveToDrive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -30,3 +30,9 @@ Attribute copying is bounded: 64 KiB of names, 1024 attributes, 16 MiB per value
 - **Tests.** A fake `claude` (a shell script) covers an answer with its citation and the arguments it got, bad arguments, a missing program, a silent one, a flood, the sign-in check, finding it, and the environment it gets.
 
 `api_key(store, account, env)` looks for a key in this order: the stored key, else `ANTHROPIC_API_KEY`, each checked as printable ASCII of at most 1 KiB. The key is never written to a settings file. The real keychain round trip is an `#[ignore]` test (`cargo test -p pdfcraft-platform -- --ignored`), since it changes the user's keychain.
+
+`drive` finds Google Drive for desktop's folders, so the app can save into them (File ▸ Save to Google Drive…); Drive uploads what is saved there. PdfCraft never talks to Google: no sign-in, no network code.
+- **Where.** On macOS, one folder per account, `~/Library/CloudStorage/GoogleDrive-<account>`, holding the account's places (My Drive, Shared drives, Other computers), named in the system's language; `my_drive` knows the common names. On Windows, a drive letter holding a My Drive folder (not yet tried on a Windows machine). Linux has no Drive for desktop.
+- **Permission.** macOS asks the user before an app may read these folders. Until then `folders` fails with `ListError::NotAllowed`, and the app says how to allow it.
+- **Bounded.** 50,000 entries read and 5,000 folders listed per folder, 32 accounts. `check_name` refuses names that could leave the folder or break a synced copy (`/ \ : * ? " < > |`, control characters, `.`/`..`, a leading dot, a trailing dot or space, Windows device names, more than 255 bytes) before anything is made.
+- **Tests.** A home folder laid out as Drive keeps it covers accounts and places, listing (sorted, no files or hidden folders, links followed), a folder that can't be read, names, and a new folder made only inside the one chosen.

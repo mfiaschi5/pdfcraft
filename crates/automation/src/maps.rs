@@ -278,6 +278,8 @@ impl Automation {
                     let (_, paths, title) = entries.iter().find(|(h, ..)| *h == hex)?.clone();
                     (hex, paths, title, page)
                 }
+                // A map snippet quotes a document, not the wiki.
+                SourceId::Wiki { .. } => return None,
             };
             Some(Anchor { sha256, paths, title, page, rect: None, quote: pdfcraft_ai::text::capped(quote, 2_000) })
         };
