@@ -403,6 +403,8 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
         } else if view.selection.is_some() || view.all_text {
             view.selection = None;
             view.all_text = false;
+        } else if view.node_mark.is_some() {
+            view.node_mark = None;
         } else {
             view.find = None;
         }
