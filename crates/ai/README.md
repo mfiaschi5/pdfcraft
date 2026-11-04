@@ -25,6 +25,8 @@ user_turn(passages: &[Passage], image: Option<&Image>, question) -> Result<Messa
 request(&Options, &Secret, history: &[Message], turn: &Message) -> Result<HttpRequest, RequestError>
 sent_sources(messages: &[Message]) -> Vec<Option<SourceId>>   // what a citation's index names
 error_event(status, body) -> Event                            // an HTTP error response
+send(&dyn Transport, &HttpRequest, sources, on_event) -> Result<Reply, TransportError>
+                    // send and decode, events as they arrive; on_event Break cancels
 
 // Answers
 Decoder::new(sent_sources) ; push(bytes, &mut Vec<Event>) ; finish(&mut Vec<Event>)

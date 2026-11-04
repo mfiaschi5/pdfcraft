@@ -62,7 +62,7 @@ fn golden_request() -> Result<(), RequestError> {
 fn haiku_gets_no_fallbacks_and_web_search_is_direct() -> Result<(), RequestError> {
     let turn = user_turn(&[], None, "Hi")?;
     let search = WebSearch { max_uses: 0, allowed_domains: vec![" iso.org ".into(), String::new()], blocked_domains: vec![" ".into()] };
-    let opts = Options { model: &HAIKU, effort: crate::model::Effort::Low, max_tokens: 0, fallbacks: true, web_search: Some(&search) };
+    let opts = Options { model: &HAIKU, effort: crate::model::Effort::Low, max_tokens: 0, fallbacks: true, web_search: Some(&search), tools: &[] };
     let req = request(&opts, &key(), &[], &turn)?;
     let b = body(&req);
     assert_eq!(b.get("fallbacks"), None);
@@ -430,4 +430,94 @@ proptest::proptest! {
         }
         let _ = decode_with(doc_sources(), &[body.as_bytes()]);
     }
+}
+
+/// A transport that answers with `body` in small pieces and an HTTP `status`.
+struct Canned {
+    status: u16,
+    body: Vec<u8>,
+}
+
+impl Transport for Canned {
+    fn post_stream(&self, _req: &HttpRequest, on_bytes: &mut dyn FnMut(&[u8]) -> std::ops::ControlFlow<()>) -> Result<u16, TransportError> {
+        for piece in self.body.chunks(5) {
+            if on_bytes(piece).is_break() {
+                return Err(TransportError::Cancelled);
+            }
+        }
+        Ok(self.status)
+    }
+}
+
+fn sent() -> HttpRequest {
+    let turn = user_turn(&[passage(3, "Rates rose 3%.")], None, "Why?").unwrap();
+    request(&Options::new(&OPUS), &key(), &[], &turn).unwrap()
+}
+
+#[test]
+fn send_streams_events_and_returns_the_reply() {
+    let mut seen = Vec::new();
+    let reply = send(&Canned { status: 200, body: ANSWER.as_bytes().to_vec() }, &sent(), doc_sources(), &mut |e| {
+        seen.push(e.clone());
+        std::ops::ControlFlow::Continue(())
+    })
+    .unwrap();
+    let (direct, _) = decode_with(doc_sources(), &[ANSWER.as_bytes()]);
+    assert_eq!(seen, direct, "the same events as decoding the body whole");
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.stop, Some(StopReason::EndTurn));
+    assert_eq!(reply.usage.output_tokens, 15);
+    assert_eq!(reply.message.content.len(), 2);
+}
+
+#[test]
+fn send_reports_an_error_status_and_can_be_cancelled() {
+    let body = br#"{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}"#.to_vec();
+    let mut seen = Vec::new();
+    let reply = send(&Canned { status: 429, body }, &sent(), vec![], &mut |e| {
+        seen.push(e.clone());
+        std::ops::ControlFlow::Continue(())
+    })
+    .unwrap();
+    assert_eq!(reply.status, 429);
+    assert_eq!(seen, vec![Event::ProviderError { kind: "rate_limit_error".into(), message: "slow down".into() }]);
+
+    let mut count = 0;
+    let cancelled = send(&Canned { status: 200, body: ANSWER.as_bytes().to_vec() }, &sent(), doc_sources(), &mut |_| {
+        count += 1;
+        std::ops::ControlFlow::Break(())
+    });
+    assert_eq!(cancelled, Err(TransportError::Cancelled));
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn tools_are_sent_and_their_calls_answered() {
+    let tool = ToolDef {
+        name: "propose_node",
+        description: "Propose a node.",
+        input_schema: json!({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}),
+    };
+    let tools = [tool];
+    let turn = user_turn(&[], None, "Map this").unwrap();
+    let opts = Options { tools: &tools, ..Options::new(&OPUS) };
+    let b = body(&request(&opts, &key(), &[], &turn).unwrap());
+    assert_eq!(b["tools"][0]["name"], "propose_node");
+    assert_eq!(b["tools"][0]["eager_input_streaming"], true);
+    // A streamed tool call is assembled, read back, and answered.
+    let stream = concat!(
+        "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"propose_node\",\"input\":{}}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"text\\\": \\\"Infl\"}}\n\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ation\\\"}\"}}\n\n",
+        "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":9}}\n\n",
+        "data: {\"type\":\"message_stop\"}\n\n",
+    );
+    let (_, d) = decode_with(vec![], &[stream.as_bytes()]);
+    let calls = tool_calls(&d.message());
+    assert_eq!(calls, vec![ToolCall { id: "toolu_1".into(), name: "propose_node".into(), input: json!({"text": "Inflation"}) }]);
+    let answer = tool_results(&[("toolu_1".into(), "proposed as n1".into(), false), ("toolu_2".into(), "no such node".into(), true)]);
+    assert_eq!(answer.role, Role::User);
+    assert_eq!(answer.content[0], json!({"type": "tool_result", "tool_use_id": "toolu_1", "content": "proposed as n1"}));
+    assert_eq!(answer.content[1]["is_error"], true);
 }

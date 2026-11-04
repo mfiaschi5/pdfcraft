@@ -2849,3 +2849,159 @@ certificate	SHA-256 digest	Impronta SHA-256
 	No image on clipboard to paste	Nessuna immagine negli appunti da incollare
 	Pinned {tool} to Home	{tool} fissato alla Home
 	Unpinned {tool} from Home	{tool} rimosso dai preferiti della Home
+
+# AI assistant and concept maps (AI-assisted; not separately native-reviewed)
+	Ask AI	Chiedi all'IA
+	Add to map	Aggiungi alla mappa
+	Add Image to Map	Aggiungi immagine alla mappa
+	Go back to the document first.	Torna prima al documento.
+	The AI assistant needs the desktop app.	L'assistente IA richiede l'app desktop.
+	Turn on the AI assistant	Attiva l'assistente IA
+	Off by default. When it is on, a question you ask sends the passages it is about to Anthropic. Nothing is ever sent in the background.	Disattivato per impostazione predefinita. Quando è attivo, ogni domanda che fai invia ad Anthropic i passaggi a cui si riferisce. Non viene mai inviato nulla in background.
+	Effort	Impegno
+	Medium (default)	Medio (predefinito)
+	Extra high	Molto alto
+	Show what will be sent before each question	Mostra cosa verrà inviato prima di ogni domanda
+	Let the assistant search the web (billed per search)	Consenti all'assistente di cercare sul web (addebitato per ricerca)
+	API key	Chiave API
+	A key is saved in the keychain.	Una chiave è salvata nel portachiavi.
+	A key is kept for this session only.	Una chiave è conservata solo per questa sessione.
+	Using the key in ANTHROPIC_API_KEY.	Viene usata la chiave in ANTHROPIC_API_KEY.
+	No key yet.	Nessuna chiave.
+	Save key	Salva chiave
+	Remove key	Rimuovi chiave
+	The assistant's answer cites this address. Open it in your browser?	La risposta dell'assistente cita questo indirizzo. Aprirlo nel browser?
+	The AI assistant is off. Nothing is sent anywhere until you turn it on.	L'assistente IA è disattivato. Non viene inviato nulla finché non lo attivi.
+	Turn on in Preferences…	Attiva nelle Preferenze…
+	No API key yet: add one in Preferences ▸ AI assistant.	Nessuna chiave API: aggiungine una in Preferenze > Assistente IA.
+	Clear conversation	Cancella conversazione
+	About: {what}	Riguardo a: {what}
+	Ask about the current page instead	Chiedi invece della pagina corrente
+	About: the selection, or the current page	Riguardo a: la selezione, o la pagina corrente
+	Explain this in simple terms.	Spiegalo in parole semplici.
+	Summarize this.	Riassumilo.
+	Translate this into English.	Traducilo in inglese.
+	Ask a question about this document	Fai una domanda su questo documento
+	Stop	Interrompi
+	Ask	Chiedi
+	Library	Biblioteca
+	Add this document to the library	Aggiungi questo documento alla biblioteca
+	Remove from the library	Rimuovi dalla biblioteca
+	The library is empty. Answers can cite the documents you add.	La biblioteca è vuota. Le risposte possono citare i documenti che aggiungi.
+	Searched the web for “{query}”	Cercato sul web: “{query}”
+	Answering…	Risposta in corso…
+	Stopped.	Interrotta.
+	The answer was cut off at its length limit.	La risposta è stata troncata al limite di lunghezza.
+	The model declined to answer.	Il modello ha rifiutato di rispondere.
+	{tokens} tokens · about {cost}	{tokens} token · circa {cost}
+	Save as comment	Salva come commento
+	Page {n}	Pagina {n}
+	Library document, page {n}	Documento della biblioteca, pagina {n}
+	This will be sent	Verrà inviato questo
+	To {model}, about {what}:	A {model}, riguardo a {what}:
+	Question: {q}	Domanda: {q}
+	Text under redaction marks is left out.	Il testo sotto i segni di redazione è escluso.
+	This document is password-protected.	Questo documento è protetto da password.
+	About {n} tokens	Circa {n} token
+	Send	Invia
+	Send to Anthropic?	Inviare ad Anthropic?
+	Your question, and the text from this document and your library that it is about, will be sent to Anthropic to answer it with {model}. Requests are billed to your API key.	La tua domanda, insieme al testo di questo documento e della tua biblioteca a cui si riferisce, verrà inviata ad Anthropic per ottenere una risposta da {model}. Le richieste sono addebitate alla tua chiave API.
+	Anthropic's privacy policy	Informativa sulla privacy di Anthropic
+	Allow and send	Consenti e invia
+	the selection on page {n} ({words} words)	la selezione a pagina {n} ({words} parole)
+	API key saved	Chiave API salvata
+	Couldn't save the key: {e}	Impossibile salvare la chiave: {e}
+	Couldn't remove the key: {e}	Impossibile rimuovere la chiave: {e}
+	The library file couldn't be read: {e}	Impossibile leggere il file della biblioteca: {e}
+	The library file couldn't be read, so it was left as it is. Move it away to start a new one.	Il file della biblioteca non è leggibile ed è stato lasciato com'è. Spostalo altrove per iniziarne uno nuovo.
+	Couldn't save the library: {e}	Impossibile salvare la biblioteca: {e}
+	the selection on page {n}	la selezione a pagina {n}
+	page {n}	pagina {n}
+	Wait for the current answer, or stop it.	Attendi la risposta in corso, oppure interrompila.
+	The request stopped unexpectedly.	La richiesta si è interrotta inaspettatamente.
+	That document is no longer in the library.	Quel documento non è più nella biblioteca.
+	{path} isn't there any more. Add the file to the library again from where it is now.	{path} non c'è più. Aggiungi di nuovo il file alla biblioteca dalla sua posizione attuale.
+	Opening library documents needs the desktop app	Per aprire i documenti della biblioteca serve l'app desktop
+	The file changed since it was added to the library; the cited page may be different. Add it again to update it.	Il file è cambiato da quando è stato aggiunto alla biblioteca; la pagina citata potrebbe essere diversa. Aggiungilo di nuovo per aggiornarlo.
+	library document, page {n}	documento della biblioteca, pagina {n}
+	Sources:	Fonti:
+	Couldn't add it to the library: {e}	Impossibile aggiungerlo alla biblioteca: {e}
+	Added to the library	Aggiunto alla biblioteca
+	{doc}, p. {n}	{doc}, p. {n}
+	Concept map	Mappa concettuale
+	Concept maps need the desktop app	Le mappe concettuali richiedono l'app desktop
+	Couldn't open the map: {e}	Impossibile aprire la mappa: {e}
+	New map	Nuova mappa
+	Couldn't save the map: {e}	Impossibile salvare la mappa: {e}
+	Added to the map “{map}”	Aggiunto alla mappa “{map}”
+	Select some text first.	Seleziona prima del testo.
+	There is no text there to add.	Lì non c'è testo da aggiungere.
+	That picture can't go on a map: it must be a PNG or JPEG file of at most 2 MB.	Questa immagine non può andare su una mappa: deve essere un file PNG o JPEG di al massimo 2 MB.
+	Picture on page {n} of {doc}	Immagine a pagina {n} di {doc}
+	This snippet's document isn't known.	Il documento di questo estratto non è noto.
+	This snippet's document isn't open, and where its file is isn't known.	Il documento di questo estratto non è aperto e non si sa dove si trovi il file.
+	Turn the AI assistant on in Preferences first.	Attiva prima l'assistente IA nelle Preferenze.
+	Ask a first question in the AI assistant panel to allow requests, then try again.	Fai una prima domanda nel pannello Assistente IA per consentire le richieste, poi riprova.
+	The assistant proposed no changes.	L'assistente non ha proposto modifiche.
+	{n} of the kept changes couldn't be applied.	{n} delle modifiche tenute non sono state applicate.
+	Couldn't export the map: {e}	Impossibile esportare la mappa: {e}
+	Undo {what}	Annulla: {what}
+	Tidy up	Riordina
+	New connections:	Nuovi collegamenti:
+	JSON Canvas (Obsidian)	JSON Canvas (Obsidian)
+	GraphML (yEd, Gephi)	GraphML (yEd, Gephi)
+	The assistant's proposal	La proposta dell'assistente
+	A note or a concept	Una nota o un concetto
+	Add note	Aggiungi nota
+	Add concept	Aggiungi concetto
+	For a snippet, select text in a document and choose Add to map, or right-click a picture.	Per un estratto, seleziona del testo in un documento e scegli Aggiungi alla mappa, oppure fai clic destro su un'immagine.
+	Click a node or a connection to see it here. Drag from a node's dot onto another node to connect them.	Fai clic su un nodo o su un collegamento per vederlo qui. Trascina dal punto di un nodo su un altro nodo per collegarli.
+	Ask the assistant	Chiedi all'assistente
+	Show connections	Mostra collegamenti
+	{s} and up	{s} e oltre
+	Kinds of connection	Tipi di collegamento
+	Node	Nodo
+	Added by the assistant	Aggiunto dall'assistente
+	Open {source}	Apri {source}
+	Connections: {n}	Collegamenti: {n}
+	Remove node	Rimuovi nodo
+	Connection	Collegamento
+	Remove connection	Rimuovi collegamento
+	Working on the map…	Lavoro sulla mappa in corso…
+	The AI assistant is off. Turn it on in Preferences ▸ AI assistant.	L'assistente IA è disattivato. Attivalo in Preferenze > Assistente IA.
+	What should change? For example: connect the selected node to related ideas	Cosa deve cambiare? Per esempio: collega il nodo selezionato a idee correlate
+	Extract the key concepts from this page and connect them.	Estrai i concetti chiave da questa pagina e collegali.
+	Connect the selected node to related ideas.	Collega il nodo selezionato a idee correlate.
+	What is missing from this map?	Cosa manca in questa mappa?
+	Only the selected node and what is within two connections of it are sent.	Vengono inviati solo il nodo selezionato e ciò che dista al massimo due collegamenti da esso.
+	Propose changes	Proponi modifiche
+	Nothing has changed yet. Keep the changes you want, then apply them.	Non è ancora cambiato nulla. Tieni le modifiche che vuoi, poi applicale.
+	Add {key}: {text}{source}	Aggiungi {key}: {text}{source}
+	Connect {from} → {to}: {kind}, {strength}	Collega {from} → {to}: {kind}, {strength}
+	Reword {node}: {text}	Riformula {node}: {text}
+	Remove the connection {from} → {to}	Rimuovi il collegamento {from} → {to}
+	Apply {n} changes	Applica {n} modifiche
+	Drag onto another node to connect them	Trascina su un altro nodo per collegarli
+	This map is empty. Add a note, or select text in a document and choose Add to map.	Questa mappa è vuota. Aggiungi una nota, oppure seleziona del testo in un documento e scegli Aggiungi alla mappa.
+	is related to	è correlato a
+	supports	sostiene
+	contradicts	contraddice
+	is an example of	è un esempio di
+	defines	definisce
+	causes	causa
+	is part of	fa parte di
+	comes before	viene prima di
+	see also	vedi anche
+	Add snippet	Aggiungi estratto
+	Add picture	Aggiungi immagine
+	Add node	Aggiungi nodo
+	Move node	Sposta nodo
+	Connect	Collega
+	Change connection	Modifica collegamento
+	Apply the assistant's changes	Applica le modifiche dell'assistente
+	A kind of your own	Un tipo tuo
+	Has a direction	Ha una direzione
+	Add kind	Aggiungi tipo
+	Add kind of connection	Aggiungi tipo di collegamento
+	Export map	Esporta mappa
+	Another map was opened, so the assistant's proposal was dropped.	È stata aperta un'altra mappa, quindi la proposta dell'assistente è stata scartata.

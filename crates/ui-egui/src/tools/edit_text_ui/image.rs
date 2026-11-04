@@ -576,6 +576,8 @@ pub enum ImageAction {
     Paste(usize, Option<[f64; 2]>),
     DrawFreehand,
     AddComment(usize, usize),
+    /// Put the picture on the concept map, with its document and page.
+    AddToMap(usize, usize),
 }
 
 /// Where the rotate knob sits, and the edge point its stem starts from: above the middle of the
@@ -1096,6 +1098,9 @@ pub(crate) fn image_context_menu(
     }
     if item(ui, raster, tl!("Save Image As…")) {
         *action = Some(ImageAction::Save(page, hit));
+    }
+    if view.map_enabled && item(ui, raster, tl!("Add Image to Map")) {
+        *action = Some(ImageAction::AddToMap(page, hit));
     }
 
     ui.separator();

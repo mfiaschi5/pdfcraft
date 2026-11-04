@@ -28,6 +28,7 @@ craft-update = { git = "https://github.com/storytold/craft-libs", version = "=0.
 # internal
 pdfcraft-geom = { path = "crates/geom", version = "0.18.0" }
 pdfcraft-ai = { path = "crates/ai", version = "0.18.0" }
+pdfcraft-graph = { path = "crates/graph", version = "0.18.0" }
 pdfcraft-filters = { path = "crates/filters", version = "0.18.0" }
 pdfcraft-cos = { path = "crates/cos", version = "0.18.0" }
 pdfcraft-crypt = { path = "crates/crypt", version = "0.18.0" }

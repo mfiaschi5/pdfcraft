@@ -545,6 +545,15 @@ pub struct DocView {
     /// The selection whose action bar was closed by its Copy button: the bar stays hidden
     /// until the selection changes, as it does once a markup button consumes the selection.
     actions_dismissed: Option<Selection>,
+    /// The selection bar's Ask was pressed: the app opens the assistant about the selection.
+    pub(crate) ask_selection: bool,
+    /// The assistant is on, so the selection bar offers Ask (set by the app each frame).
+    pub(crate) ask_enabled: bool,
+    /// The selection bar's Add to map was pressed: the app adds the selection to the map.
+    pub(crate) map_selection: bool,
+    /// Concept maps can be kept, so the selection bar and a picture's menu offer Add to map (set
+    /// by the app each frame).
+    pub(crate) map_enabled: bool,
     /// The drag in progress started a text selection: the wheel scrolls the page during it
     /// (#721), which egui's scroll area refuses while anything is dragged.
     selection_drag: bool,
@@ -941,6 +950,10 @@ impl DocView {
             selection: None,
             all_text: false,
             actions_dismissed: None,
+            ask_selection: false,
+            ask_enabled: false,
+            map_selection: false,
+            map_enabled: false,
             selection_drag: false,
             clicks: 0,
             last_press_time: 0.0,
@@ -2717,6 +2730,10 @@ fn draw_pages(
                     copy_image = Some(comments::CanvasAction::CopyImageFile(page, image));
                     ui.close();
                 }
+                if view.map_enabled && ui.button(tl!("Add Image to Map")).clicked() {
+                    copy_image = Some(comments::CanvasAction::AddImageToMap(page, image));
+                    ui.close();
+                }
                 ui.separator();
             }
         }
@@ -3842,6 +3859,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         Some(comments::CanvasAction::Properties(p, i)) => open_props = Some((p, i)),
         Some(comments::CanvasAction::CopyImage(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::Copy(p, i)),
         Some(comments::CanvasAction::CopyImageFile(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::CopyFile(p, i)),
+        Some(comments::CanvasAction::AddImageToMap(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::AddToMap(p, i)),
         None => {}
     }
     schedule_presentation_turn(ui, view, present, clicked_link.is_some());
@@ -3963,6 +3981,7 @@ fn apply_frame_requests(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui, 
             app.copy_page_image(page, index);
         }
         Some(crate::edit_text_ui::ImageAction::CopyFile(page, index)) => app.copy_page_image_file(page, index),
+        Some(crate::edit_text_ui::ImageAction::AddToMap(page, image)) => app.add_image_to_map(index, page, image),
         Some(crate::edit_text_ui::ImageAction::Cut(page, image)) => {
             app.cut_page_image(page, image);
         }
@@ -4101,6 +4120,12 @@ fn apply_frame_requests(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui, 
     }
     if copy_selected {
         app.execute("edit.copy");
+    }
+    if std::mem::take(&mut app.views[index].ask_selection) {
+        app.ask_about_selection(index);
+    }
+    if std::mem::take(&mut app.views[index].map_selection) {
+        app.add_selection_to_map(index);
     }
     // Read mode hides the tools (#2646), and full screen is the page and nothing else (#1459);
     // the quick tools come back with the window.

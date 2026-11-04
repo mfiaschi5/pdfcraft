@@ -24,6 +24,9 @@ pdfcraft-content = { workspace = true }
 pdfcraft-render = { workspace = true }
 pdfcraft-model = { workspace = true }
 pdfcraft-platform = { workspace = true }
+# The AI assistant: request building, stream decoding, the library (no network).
+pdfcraft-ai = { workspace = true }
+pdfcraft-graph = { workspace = true }
 egui = { workspace = true, features = ["bytemuck", "default_fonts", "monochrome_emoji_fonts"] }
 egui_extras = { workspace = true }
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "persistence", "links", "clipboard"] }

@@ -138,6 +138,9 @@ fn passages_name_this_document_and_the_library() {
     assert_eq!(mine.len(), 2);
     assert!(mine.iter().all(|p| p.id == SourceId::ThisDocument { page: 0 }));
     assert_eq!(mine[0].title, "report.pdf, page 1 (the selection)");
+    let page = context_passages(&s.assistant_context(id, 0, &Selected::Page).unwrap());
+    assert_eq!(page.len(), 1);
+    assert_eq!(page[0].title, "report.pdf, page 1 (the page)");
 
     let mut lib = Library::new();
     let current = s.library_document(id, 0).unwrap();

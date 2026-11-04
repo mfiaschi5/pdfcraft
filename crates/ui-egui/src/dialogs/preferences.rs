@@ -537,7 +537,14 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     });
     ui.add_space(12.0);
 
-    // Card 6: JavaScript
+    // Card 6: AI assistant (before JavaScript, which stays the last card)
+    let title_ai = tl!("AI assistant");
+    preference_card(ui, t, title_ai, Some("sparkles"), &mut ctx, |ui, ctx| {
+        card_assistant(ui, app, t, ctx);
+    });
+    ui.add_space(12.0);
+
+    // Card 7: JavaScript
     let title6 = "JavaScript";
     preference_card(ui, t, title6, Some("code-xml"), &mut ctx, |ui, ctx| {
         card_javascript(ui, app, t, ctx);
@@ -553,6 +560,91 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     if ctx.total_matches != last_matches {
         ui.data_mut(|d| d.insert_temp(matches_id, ctx.total_matches));
         ui.ctx().request_repaint();
+    }
+}
+
+/// Content for the AI assistant card. Off by default; the key goes to the keychain, never here.
+fn card_assistant(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mut PrefSearchContext) {
+    if app.ai_service.is_none() {
+        ctx.label_secondary(ui, tl!("The AI assistant needs the desktop app."), t);
+        return;
+    }
+    ctx.checkbox(ui, &mut app.assistant.prefs.enabled, tl!("Turn on the AI assistant"), t);
+    ctx.label_secondary(
+        ui,
+        tl!("Off by default. When it is on, a question you ask sends the passages it is about to Anthropic. Nothing is ever sent in the background."),
+        t,
+    );
+    if !app.assistant.prefs.enabled {
+        return;
+    }
+    ui.add_space(6.0);
+    let label = ctx.label_primary(ui, tl!("Model"), t);
+    let prefs = &mut app.assistant.prefs;
+    craft_ui::ComboBox::from_id_salt("assistant-model")
+        .selected_text(prefs.model().name)
+        .width(200.0)
+        .show_ui(ui, |ui| {
+            for m in pdfcraft_ai::model::MODELS {
+                if ui.selectable_value(&mut prefs.model, m.id.to_owned(), m.name).clicked() {
+                    ui.close();
+                }
+            }
+        })
+        .response
+        .labelled_by(label.id);
+    let label = ctx.label_primary(ui, tl!("Effort"), t);
+    use pdfcraft_ai::model::Effort;
+    craft_ui::ComboBox::from_id_salt("assistant-effort")
+        .selected_text(tl!(effort_name(prefs.effort)))
+        .width(200.0)
+        .show_ui(ui, |ui| {
+            for e in [Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh, Effort::Max] {
+                if ui.selectable_value(&mut prefs.effort, e, tl!(effort_name(e))).clicked() {
+                    ui.close();
+                }
+            }
+        })
+        .response
+        .labelled_by(label.id);
+    ctx.checkbox(ui, &mut app.assistant.prefs.preview, tl!("Show what will be sent before each question"), t);
+    ctx.checkbox(ui, &mut app.assistant.prefs.web_search, tl!("Let the assistant search the web (billed per search)"), t);
+    ui.add_space(6.0);
+    let label = ctx.label_primary(ui, tl!("API key"), t);
+    if app.assistant.key_status.is_none() {
+        app.refresh_key_status();
+    }
+    let status = match app.assistant.key_status {
+        Some(crate::assistant_ui::KeyStatus::Stored) if pdfcraft_platform::assistant::Keychain::available() => tl!("A key is saved in the keychain."),
+        Some(crate::assistant_ui::KeyStatus::Stored) => tl!("A key is kept for this session only."),
+        Some(crate::assistant_ui::KeyStatus::FromEnvironment) => tl!("Using the key in ANTHROPIC_API_KEY."),
+        _ => tl!("No key yet."),
+    };
+    ctx.label_secondary(ui, status, t);
+    let mut save = false;
+    let mut remove = false;
+    ui.horizontal(|ui| {
+        ui.add(crate::widgets::line(&mut app.assistant.key_draft).password(true).hint_text("sk-ant-…").desired_width(220.0).char_limit(1024))
+            .labelled_by(label.id);
+        save = ui.add_enabled(!app.assistant.key_draft.trim().is_empty(), egui::Button::new(tl!("Save key"))).clicked();
+        remove = app.assistant.key_status == Some(crate::assistant_ui::KeyStatus::Stored) && ui.button(tl!("Remove key")).clicked();
+    });
+    if save {
+        app.save_assistant_key();
+    }
+    if remove {
+        app.remove_assistant_key();
+    }
+}
+
+fn effort_name(e: pdfcraft_ai::model::Effort) -> &'static str {
+    use pdfcraft_ai::model::Effort;
+    match e {
+        Effort::Low => "Low",
+        Effort::Medium => "Medium (default)",
+        Effort::High => "High",
+        Effort::Xhigh => "Extra high",
+        Effort::Max => "Maximum",
     }
 }
 
@@ -797,7 +889,7 @@ fn card_fill_and_sign(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx:
     date_format(ui, app, t, ctx);
 }
 
-/// Content for Card 6: JavaScript
+/// Content for Card 7: JavaScript
 fn card_javascript(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, ctx: &mut PrefSearchContext) {
     let mut on = app.session.javascript();
     if ctx.checkbox(ui, &mut on, tl!("Enable Acrobat JavaScript"), t).changed() {

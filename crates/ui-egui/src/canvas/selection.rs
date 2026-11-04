@@ -53,6 +53,20 @@ pub(super) fn click_unit(text: &PageText, clicks: u32, a: usize) -> Option<(usiz
 }
 
 impl DocView {
+    /// The selection as the assistant reads it: its page, and its glyphs (a run) or rectangle (a
+    /// column). `None` without one, or after Select All of the document.
+    pub(crate) fn assistant_selection(&self) -> Option<(usize, pdfcraft_engine::assistant::Selected)> {
+        if self.all_text {
+            return None;
+        }
+        let s = self.selection?;
+        let selected = match s.span {
+            Span::Run { anchor, head } => pdfcraft_engine::assistant::Selected::Glyphs(Selection::range(anchor, head)),
+            Span::Column { rect } => pdfcraft_engine::assistant::Selected::Region(rect),
+        };
+        Some((s.page, selected))
+    }
+
     /// The text selection as markup quadrilaterals in user space: (page, quads).
     pub(crate) fn selection_quads(&self, info: &DocInfo) -> Option<(usize, Vec<[f64; 8]>)> {
         let s = self.selection?;
@@ -154,6 +168,10 @@ enum SelectionAction {
     Markup(comments::CommentTool),
     Replace,
     Copy,
+    /// Ask the AI assistant about the selection.
+    Ask,
+    /// Add the selection to the concept map.
+    Map,
 }
 
 /// Actions on an existing text selection, next to the selected words.
@@ -209,6 +227,12 @@ pub(super) fn selection_actions(
                     if ui.add_enabled(can_copy, egui::Button::new(tl!("Copy"))).clicked() {
                         chosen = Some(SelectionAction::Copy);
                     }
+                    if view.ask_enabled && ui.add_enabled(can_copy, egui::Button::new(tl!("Ask AI"))).clicked() {
+                        chosen = Some(SelectionAction::Ask);
+                    }
+                    if view.map_enabled && ui.add_enabled(can_copy, egui::Button::new(tl!("Add to map"))).clicked() {
+                        chosen = Some(SelectionAction::Map);
+                    }
                 });
             });
         },
@@ -218,6 +242,13 @@ pub(super) fn selection_actions(
         // Copying closes the bar but keeps the words selected, for ⌘C or a second action.
         view.actions_dismissed = Some(selection);
         return true;
+    }
+    if let SelectionAction::Ask | SelectionAction::Map = action {
+        // Asking and adding to the map keep the words selected too.
+        view.actions_dismissed = Some(selection);
+        view.ask_selection = matches!(action, SelectionAction::Ask);
+        view.map_selection = matches!(action, SelectionAction::Map);
+        return false;
     }
     let Some((page, quads)) = view.selection_quads(info) else { return false };
     let last = quads.last().copied().unwrap_or_default();
@@ -247,8 +278,8 @@ pub(super) fn selection_actions(
                 author: prefs.author.clone(),
             }));
         }
-        // Copy is dispatched through the app after the view borrow ends.
-        SelectionAction::Copy => {}
+        // Copy and Ask are dispatched through the app after the view borrow ends.
+        SelectionAction::Copy | SelectionAction::Ask | SelectionAction::Map => {}
     }
     false
 }

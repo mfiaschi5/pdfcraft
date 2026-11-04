@@ -235,6 +235,10 @@ impl PdfCraftApp {
 
     /// Undo the last change: to the Combine files list while its tab shows, else the document.
     pub fn undo(&mut self) {
+        if self.maps.open {
+            self.map_history_step(true);
+            return;
+        }
         // While a polygon, cloud or run of connected lines is being drawn, Undo takes back its
         // last point instead of the last finished edit.
         if let Some((i, _)) = self.active_ids()
@@ -277,6 +281,10 @@ impl PdfCraftApp {
     }
 
     pub fn redo(&mut self) {
+        if self.maps.open {
+            self.map_history_step(false);
+            return;
+        }
         if self.combine_showing() {
             self.combine_history_step(false);
         } else if !self.redo_in_page_box() {

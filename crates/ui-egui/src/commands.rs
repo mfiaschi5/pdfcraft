@@ -79,6 +79,16 @@ impl PdfCraftApp {
     /// Whether a registered command can run now. The engine judges the document (security,
     /// contents, undo history); view state it can't see is checked here.
     pub(crate) fn command_enabled(&self, spec: &CommandSpec) -> bool {
+        // The concept map covers the document: Undo and Redo are the map's, and the document's
+        // commands wait until it is back.
+        if self.maps.open {
+            return match spec.needs {
+                commands::Needs::Undo => self.maps.can_undo(),
+                commands::Needs::Redo => self.maps.can_redo(),
+                commands::Needs::Nothing => true,
+                _ => false,
+            };
+        }
         // Undo and Redo act on the Combine files list while its tab shows.
         if self.combine_showing() && matches!(spec.needs, commands::Needs::Undo | commands::Needs::Redo) {
             return self.combine_can_undo(spec.needs == commands::Needs::Undo);
@@ -121,6 +131,7 @@ impl PdfCraftApp {
         match spec.needs {
             commands::Needs::Undo => tl!("Nothing to undo").to_string(),
             commands::Needs::Redo => tl!("Nothing to redo").to_string(),
+            _ if self.maps.open => tl!("Go back to the document first.").to_string(),
             commands::Needs::FillForms if self.active.is_some() => tl!("This document has no form fields you can fill in").to_string(),
             commands::Needs::HasComments if self.active.is_some() => tl!("This document has no comments to flatten").to_string(),
             commands::Needs::HasFields if self.active.is_some() => tl!("This document has no form fields to flatten").to_string(),
@@ -727,6 +738,11 @@ impl PdfCraftApp {
             "a11y.alt_text" => self.start_alt_text(),
             "a11y.autotag_fields" => self.autotag_form_fields(),
             "a11y.tags" => self.choose_right_panel(Some(RightPanel::Tags)),
+            "ai.ask" => {
+                self.choose_right_panel(Some(RightPanel::Assistant));
+                self.refresh_key_status();
+            }
+            "map.open" => self.open_map_workspace(),
             "a11y.reading_options" => self.dialog = Some(Dialog::Properties(crate::PropsTab::Advanced)),
             "redact.mark" => {
                 self.quick_tool = crate::QuickTool::Redact;

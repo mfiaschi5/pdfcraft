@@ -136,10 +136,10 @@ claude mcp add pdfcraft -- pdfcraft-cli mcp --root <dir>
 4. Add an end-to-end test in `tests/it/automation.rs`. `tool_table_is_well_formed` checks names, schemas and command links.
 
 
-## AI assistant (offline)
+## AI assistant
 
-The assistant's library and its requests, with nothing sent (this build has no network
-transport; see the ADR "AI assistant"):
+The assistant's library and its requests. Nothing is sent unless the app gave the session a
+transport (see the ADR "AI assistant"):
 - **Adding.** `ai_library_add {paths?, docs?, library?}` adds PDF files or open documents to the
   personal library. A document is known by the SHA-256 of its bytes, so adding the same file from
   elsewhere records its new path. A file that needs a password is listed as `needs_password` and
@@ -168,6 +168,24 @@ transport; see the ADR "AI assistant"):
   It refuses documents that forbid copying, and counts the glyphs it left out under redaction
   marks. Library results leave out the document itself, and any copy of it indexed from the same
   path, which may still hold text it has since marked for redaction.
+
+## Concept maps
+
+A concept map is a `.pdfmap.json` file inside `--root` (`pdfcraft-graph`), rewritten atomically;
+reading needs read access, changing it write access too.
+- **Building.** `graph_create {map, title?}` (refused if the file exists), `graph_add_node {map,
+  type: concept|note|snippet, text?, doc?, page?, rect?, position?}`, `graph_add_kind {map, name,
+  directed?, line?}`, `graph_connect {map, from, to, kind, strength?, label?}`, `graph_remove {map,
+  node?|connection?}`, `graph_layout {map}`. A snippet is the text of an open document's page or
+  region, anchored by the document's SHA-256 and the page, and follows the assistant's rules:
+  refused for documents that forbid copying, without text under unapplied redaction marks.
+- **Reading.** `graph_show {map}` (1-based pages), `graph_export {map, format: json_canvas|graphml,
+  out}`, `graph_import {map, canvas}` from a JSON Canvas.
+- **The AI.** `ai_map_edit {map, request, doc?, page?, nodes?, k?, library?, model?, effort?,
+  dry_run?}` asks Claude for changes and applies none: it returns the proposal (nodes,
+  connections, rewordings, removals, each with a reason). `nodes` limits what it sees of the map. A snippet must quote a passage that was sent, word for word.
+  `graph_apply {map, proposal, accept}` applies the changes kept, by 1-based number, and says
+  which were skipped and why. Sending follows `ai_ask`'s rules.
 
 ## Moving several page objects
 

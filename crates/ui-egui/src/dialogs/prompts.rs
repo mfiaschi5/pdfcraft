@@ -157,7 +157,9 @@ pub(super) fn link_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
             ui.label(egui::RichText::new(title).font(theme::semibold(16.0)));
         });
         ui.add_space(6.0);
-        let template = if email {
+        let template = if pending.origin == crate::LinkOrigin::Assistant {
+            tl!("The assistant's answer cites this address. Open it in your browser?")
+        } else if email {
             tl!("{who} in this document wants to open your email app with this address:")
         } else {
             tl!("{who} in this document wants to open this address in your browser:")
