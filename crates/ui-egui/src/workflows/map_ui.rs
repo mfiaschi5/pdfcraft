@@ -448,9 +448,12 @@ impl PdfCraftApp {
             self.notify_tr("Ask a first question in the AI assistant panel to allow requests, then try again.");
             return;
         }
-        let Some(key) = service.key() else {
-            self.notify_tr("No API key yet: add one in Preferences ▸ AI assistant.");
-            return;
+        let (transport, key) = match service.route(&self.assistant.prefs) {
+            Ok(route) => route,
+            Err(e) => {
+                self.notify(e);
+                return;
+            }
         };
         let request = self.maps.request.trim().to_owned();
         if request.is_empty() {
@@ -479,7 +482,6 @@ impl PdfCraftApp {
         let graph = self.maps.graph.clone();
         let model = self.assistant.prefs.model();
         let effort = self.assistant.prefs.effort;
-        let transport = service.transport.clone();
         let cancel = Arc::new(AtomicBool::new(false));
         let stop = cancel.clone();
         let (tx, rx) = mpsc::channel();

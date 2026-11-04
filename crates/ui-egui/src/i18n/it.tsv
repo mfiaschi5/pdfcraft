@@ -3021,3 +3021,20 @@ certificate	SHA-256 digest	Impronta SHA-256
 	Nothing else on the map yet.	Sulla mappa non c'è ancora altro.
 	No node has those words.	Nessun nodo contiene quelle parole.
 	Add selection to map	Aggiungi la selezione alla mappa
+	Claude Code isn't installed on this computer.	Claude Code non è installato su questo computer.
+	{tokens} tokens · on your Claude plan	{tokens} token · sul tuo piano Claude
+	Your question, and the text from this document and your library that it is about, will be sent to Anthropic through Claude Code on this computer, to answer it with {model}. Requests count against your Claude plan.	La tua domanda, insieme al testo di questo documento e della tua biblioteca a cui si riferisce, verrà inviata ad Anthropic tramite Claude Code su questo computer, per ottenere una risposta da {model}. Le richieste contano sui limiti del tuo piano Claude.
+	Claude Code didn't answer.	Claude Code non ha risposto.
+	Connect with	Collegati con
+	An Anthropic API key	Una chiave API di Anthropic
+	Claude Code, with your Claude subscription (personal use)	Claude Code, con il tuo abbonamento Claude (uso personale)
+	Claude Code isn't installed on this computer. Install it from claude.com/claude-code, sign in to it, then restart PdfCraft.	Claude Code non è installato su questo computer. Installalo da claude.com/claude-code, accedi, poi riavvia PdfCraft.
+	Claude Code	Claude Code
+	Signed in to your Claude account ({email}).	Accesso effettuato al tuo account Claude ({email}).
+	Signed in to your Claude account.	Accesso effettuato al tuo account Claude.
+	Signed in with {method}, not a Claude subscription: requests go on that account.	Accesso effettuato con {method}, non con un abbonamento Claude: le richieste vanno su quell'account.
+	Check sign-in	Verifica l'accesso
+	Copy the sign-in command	Copia il comando di accesso
+	To sign in, paste the command into Terminal and follow it in your browser. Web search isn't available this way.	Per accedere, incolla il comando nel Terminale e segui i passaggi nel browser. In questo modo la ricerca web non è disponibile.
+	For your own use: Anthropic asks apps to use API keys, and lets you sign in to the unmodified Claude Code program with your own subscription. PdfCraft runs that program, with its tools and add-ons turned off, and never reads its sign-in.	Solo per uso personale: Anthropic chiede alle app di usare le chiavi API e ti consente di accedere al programma Claude Code originale con il tuo abbonamento. PdfCraft avvia quel programma, con strumenti ed estensioni disattivati, e non legge mai le sue credenziali.
+	Sign-in command copied	Comando di accesso copiato

@@ -31,6 +31,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         can_add: app.session.get(id).is_some_and(|d| d.allows_copying()) && app.views.get(index).is_some_and(|v| v.assistant_selection().is_some()),
     };
     let has_ai_service = app.ai_service.is_some();
+    let has_claude_code = app.ai_service.as_ref().is_some_and(|s| s.claude_code.is_some());
     let mut bm_rename = app.bookmark_rename.clone();
     let bm_editable = app.session.get(id).is_some_and(|d| d.allows_assembly() && d.read_only_reason.is_none());
     // Prepare a form is open: the Fields panel orders tabs.
@@ -286,7 +287,9 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     }
                     RightPanel::Search => crate::search_ui::panel(ui, &t, view, info.pages.len()),
                     RightPanel::Compare => compare_action = crate::compare_ui::panel(ui, &t, compare, id),
-                    RightPanel::Assistant => assistant_action = crate::assistant_ui::panel(ui, &t, assistant, id, info.pages.len(), has_ai_service),
+                    RightPanel::Assistant => {
+                        assistant_action = crate::assistant_ui::panel(ui, &t, assistant, id, info.pages.len(), has_ai_service, has_claude_code)
+                    }
                     RightPanel::Map => map_actions = crate::map_ui::panel(ui, &t, maps, &here),
                     RightPanel::Attachments => {
                         let attachable = doc.allows_modification() && doc.read_only_reason.is_none();

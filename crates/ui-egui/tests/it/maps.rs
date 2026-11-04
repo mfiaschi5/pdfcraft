@@ -51,7 +51,7 @@ fn harness(dir: Option<PathBuf>, transport: Option<Arc<Queue>>) -> Harness<'stat
         if let Some(transport) = transport {
             let keys = Arc::new(SessionKeys::default());
             keys.set("anthropic", &Secret::new("sk-ant-ui-test")).unwrap();
-            app.ai_service = Some(AiService { transport, keys, env_key: Arc::new(|| None) });
+            app.ai_service = Some(AiService { transport, keys, env_key: Arc::new(|| None), claude_code: None });
             app.assistant.prefs.enabled = true;
             app.assistant.prefs.consented = true;
             // Never the user's own library.

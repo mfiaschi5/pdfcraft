@@ -814,5 +814,12 @@ fn ai_service() -> pdfcraft_ui_egui::AiService {
         env_key: std::sync::Arc::new(|| {
             std::env::var(pdfcraft_platform::assistant::API_KEY_ENV).ok().map(|k| pdfcraft_ai::transport::Secret::new(k.trim()))
         }),
+        // Only looked for here (no program is run until the user chooses it and asks).
+        claude_code: pdfcraft_platform::assistant::ClaudeCode::find().map(|cc| {
+            let program = cc.program().display().to_string();
+            let cc = std::sync::Arc::new(cc);
+            let asked = cc.clone();
+            pdfcraft_ui_egui::ClaudeCodeLink { transport: cc, program, sign_in: std::sync::Arc::new(move || asked.sign_in()) }
+        }),
     }
 }

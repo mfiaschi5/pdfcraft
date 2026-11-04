@@ -89,7 +89,7 @@ fn harness(setup: Setup, transport: Arc<Canned>, keys: Arc<SessionKeys>) -> Harn
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.open_bytes("rates.pdf", None, bytes).unwrap();
-        app.ai_service = Some(AiService { transport, keys, env_key: Arc::new(|| None) });
+        app.ai_service = Some(AiService { transport, keys, env_key: Arc::new(|| None), claude_code: None });
         app.assistant.prefs.enabled = setup.enabled;
         app.assistant.prefs.consented = setup.consented;
         app.assistant.prefs.preview = setup.preview;
@@ -253,4 +253,69 @@ fn the_key_is_never_written_with_the_settings() {
     back.restore(&saved.replace("claude-opus-5-5", "not-a-model"));
     assert!(back.assistant.prefs.enabled);
     assert_eq!(back.assistant.prefs.model, "claude-opus-5-5");
+}
+
+/// The assistant set to Claude Code: `claude_code` stands in for the program (the real transport
+/// is tested in pdfcraft-platform with a fake program), and there is no API key at all.
+fn through_claude_code(api: Arc<Canned>, claude_code: Option<Arc<Canned>>) -> Harness<'static, PdfCraftApp> {
+    let bytes = fixture();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("rates.pdf", None, bytes).unwrap();
+        let link = claude_code.map(|t| pdfcraft_ui_egui::ClaudeCodeLink {
+            transport: t,
+            program: "/Applications/Claude Code/claude".into(),
+            sign_in: Arc::new(|| Ok(pdfcraft_ai::claude_code::SignIn { method: "claude.ai".into(), email: Some("me@example.com".into()) })),
+        });
+        app.ai_service = Some(AiService { transport: api, keys: Arc::new(SessionKeys::default()), env_key: Arc::new(|| None), claude_code: link });
+        app.assistant.prefs.enabled = true;
+        app.assistant.prefs.preview = false;
+        app.assistant.prefs.provider = pdfcraft_ui_egui::AssistantProvider::ClaudeCode;
+        // Asked for, but Claude Code runs with no tools: it is left out.
+        app.assistant.prefs.web_search = true;
+        app.assistant.library_file = Some(std::env::temp_dir().join(format!("pdfcraft-ui-assistant-{}-cc-library.json", std::process::id())));
+        app
+    });
+    h.run_steps(6);
+    h
+}
+
+#[test]
+fn with_claude_code_the_assistant_answers_without_a_key_and_on_the_plan() {
+    let api = canned("pdfcraft-doc:i0");
+    let cc = canned("pdfcraft-doc:i0");
+    let mut h = through_claude_code(api.clone(), Some(cc.clone()));
+    ask(&mut h, "Why did costs fall?");
+    // Consent says where it goes and that the plan pays.
+    assert!(h.query_by_label_contains("through Claude Code on this computer").is_some(), "toast: {:?}", h.state().toast);
+    assert!(h.query_by_label_contains("count against your Claude plan").is_some());
+    h.get_by_label("Allow and send").click();
+    h.run_steps(3);
+    wait_for_answer(&mut h);
+    assert_eq!(cc.seen.lock().unwrap().len(), 1, "sent through Claude Code");
+    assert!(api.seen.lock().unwrap().is_empty(), "nothing through the API");
+    let body: serde_json::Value = serde_json::from_slice(&cc.seen.lock().unwrap()[0].body).unwrap();
+    assert!(body.get("tools").is_none(), "no web search: Claude Code runs without tools");
+    assert!(h.query_by_label_contains("on your Claude plan").is_some(), "no dollar cost for a plan");
+    assert!(h.query_by_label_contains("about $").is_none());
+    // Preferences ask the program how it is signed in.
+    h.state_mut().check_claude_sign_in();
+    support::wait_until(&mut h, "the sign-in answer", |app| app.assistant.claude_sign_in.is_some());
+    assert!(h.state().assistant.claude_sign_in.as_ref().is_some_and(|s| s.as_ref().is_ok_and(|s| s.is_subscription())));
+}
+
+#[test]
+fn without_claude_code_installed_the_panel_says_so_and_sends_nothing() {
+    let api = canned("pdfcraft-doc:i0");
+    let mut h = through_claude_code(api.clone(), None);
+    assert!(h.state_mut().execute("ai.ask"));
+    h.run_steps(3);
+    assert!(h.query_by_label("Claude Code isn't installed on this computer.").is_some());
+    h.state_mut().assistant.draft = "Why?".into();
+    h.run_steps(2);
+    h.get_by_label("Ask").click();
+    h.run_steps(3);
+    assert!(api.seen.lock().unwrap().is_empty());
+    assert!(h.state().toast.as_ref().is_some_and(|t| t.0.contains("Claude Code isn't installed")), "{:?}", h.state().toast);
 }
