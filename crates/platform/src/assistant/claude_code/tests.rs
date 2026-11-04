@@ -129,3 +129,61 @@ fn no_api_key_reaches_the_program() {
     }
     assert!(c.get_current_dir().is_some_and(|d| d.ends_with("pdfcraft-claude-code")), "an empty folder of its own");
 }
+
+/// The real program, signed in, on the user's plan: `PDFCRAFT_LIVE_CLAUDE=1 cargo test -p
+/// pdfcraft-platform -- --ignored live`. A question with sources to cite, then a map-style edit.
+#[test]
+#[ignore = "runs the installed Claude Code on the user's own plan"]
+fn live_the_installed_program_cites_its_sources_and_calls_tools() {
+    if std::env::var_os("PDFCRAFT_LIVE_CLAUDE").is_none() {
+        return;
+    }
+    let cc = ClaudeCode::find().expect("Claude Code is installed");
+    assert!(cc.sign_in().unwrap().is_subscription(), "signed in with a Claude subscription");
+    let passages = [
+        Passage {
+            id: SourceId::ThisDocument { page: 0 },
+            title: "rates.pdf, page 1".into(),
+            text: "The central bank raised its rate to 4% in March.".into(),
+        },
+        Passage { id: SourceId::ThisDocument { page: 3 }, title: "rates.pdf, page 4".into(), text: "Inflation fell to 2.1% by September.".into() },
+    ];
+    let turn = claude::user_turn(&passages, None, "What did the bank do, and what happened to inflation? One sentence each.").unwrap();
+    let options = Options::new(&pdfcraft_ai::model::HAIKU);
+    let req = claude::request(&options, &Secret::new("claude-code"), &[], &turn).unwrap();
+    let mut seen = Vec::new();
+    let reply = claude::send(&cc, &req, claude::sent_sources(std::slice::from_ref(&turn)), &mut |e| {
+        seen.push(e.clone());
+        ControlFlow::Continue(())
+    })
+    .unwrap();
+    let text: String = seen.iter().filter_map(|e| if let Event::Text { text, .. } = e { Some(text.as_str()) } else { None }).collect();
+    let pages: Vec<u32> = seen
+        .iter()
+        .filter_map(
+            |e| if let Event::Citation { source: pdfcraft_ai::source::Source::ThisDocument { page, .. }, .. } = e { Some(*page) } else { None },
+        )
+        .collect();
+    eprintln!("answer: {text}\npages cited: {pages:?}\nusage: {:?}\nstop: {:?}", reply.usage, reply.stop);
+    assert!(!seen.iter().any(|e| matches!(e, Event::ProviderError { .. })), "{seen:?}");
+    assert!(!text.contains('[') && pages.contains(&0) && pages.contains(&3), "{text} {pages:?}");
+
+    let tools = [claude::ToolDef {
+        name: "propose_node",
+        description: "Propose a concept for the map, with a short label.",
+        input_schema: serde_json::json!({"type": "object", "properties": {"label": {"type": "string"}}, "required": ["label"]}),
+    }];
+    let turn = claude::user_turn(&passages, None, "Propose the two main concepts as nodes.").unwrap();
+    let options = Options { tools: &tools, ..Options::new(&pdfcraft_ai::model::HAIKU) };
+    let req = claude::request(&options, &Secret::new("claude-code"), &[], &turn).unwrap();
+    let mut seen = Vec::new();
+    let reply = claude::send(&cc, &req, claude::sent_sources(std::slice::from_ref(&turn)), &mut |e| {
+        seen.push(e.clone());
+        ControlFlow::Continue(())
+    })
+    .unwrap();
+    let calls = claude::tool_calls(&reply.message);
+    eprintln!("calls: {calls:?}\nstop: {:?}\nevents: {}", reply.stop, seen.len());
+    assert!(!seen.iter().any(|e| matches!(e, Event::ProviderError { .. })), "{seen:?}");
+    assert!(!calls.is_empty() && calls.iter().all(|c| c.name == "propose_node" && c.input["label"].is_string()), "{calls:?}");
+}

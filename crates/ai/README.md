@@ -71,8 +71,10 @@ stream-json message, and its output back into the API's events, so `send` reads 
   own system prompt in place of Claude Code's, so a PDF's text can't make it run or read anything;
 - passages go as numbered text, cited as `[n]`; a marker becomes a citation only of a passage
   sent, but the quoted words aren't checked as the API checks them;
-- a request with tools asks for one JSON reply, turned into tool calls, and the follow-up with
-  their results is answered without running the program again;
+- a request with tools asks for one JSON reply, turned into tool calls, with each passage headed
+  by its source id (a map snippet names the one it quotes) instead of a number. The follow-up
+  with their results is answered without running the program again, unless a call was refused:
+  then it runs again, told which calls were refused and why, to correct them;
 - web search, thinking and refusal fallbacks don't carry over.
 
 ## What is sent

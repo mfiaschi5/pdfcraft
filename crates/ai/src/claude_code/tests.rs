@@ -158,7 +158,7 @@ fn an_answer_without_streamed_events_still_arrives() {
 }
 
 #[test]
-fn tools_become_one_json_reply_and_their_results_need_no_second_run() {
+fn tools_become_one_json_reply_and_only_refused_calls_need_a_second_run() {
     let tools = [ToolDef {
         name: "propose_node",
         description: "Propose a node.",
@@ -170,6 +170,10 @@ fn tools_become_one_json_reply_and_their_results_need_no_second_run() {
     let run = invocation(&req.body).unwrap();
     let system = run.args.last().cloned().unwrap_or_default();
     assert!(system.contains("one JSON object") && system.contains("propose_node: Propose a node."), "{system}");
+    // Passages are headed by the source ids a snippet names, not numbered for citations.
+    assert!(system.contains("source id in brackets") && !system.contains("end it with its number"), "{system}");
+    let stdin = String::from_utf8(run.stdin.clone()).unwrap();
+    assert!(stdin.contains("[pdfcraft-doc:i0] rates.pdf, page 1") && !stdin.contains("[1] rates.pdf"), "{stdin}");
     let reply =
         r#"Here: {"calls": [{"name": "propose_node", "input": {"text": "Inflation"}}, {"name": "rm_rf", "input": {}}], "summary": "One concept."}"#;
     let lines = answer(&[reply.get(..20).unwrap(), reply.get(20..).unwrap()]);
@@ -186,8 +190,21 @@ fn tools_become_one_json_reply_and_their_results_need_no_second_run() {
     assert_eq!(got.stop, Some(StopReason::Other("tool_use".into())));
     // The follow-up with the results is answered without the program.
     let results = claude::tool_results(&[(calls[0].id.clone(), "kept".into(), false)]);
-    let next = claude::request(&options, &Secret::new("claude-code"), &[turn, got.message], &results).unwrap();
+    let next = claude::request(&options, &Secret::new("claude-code"), &[turn.clone(), got.message.clone()], &results).unwrap();
     assert!(invocation(&next.body).unwrap().reply.is_some());
+    // Unless a call was refused: then it runs again, told which call and why, and its new calls
+    // take new ids.
+    let refused = claude::tool_results(&[(calls[0].id.clone(), "the key n1 is taken; choose another".into(), true)]);
+    let next = claude::request(&options, &Secret::new("claude-code"), &[turn, got.message], &refused).unwrap();
+    let again = invocation(&next.body).unwrap();
+    assert!(again.reply.is_none());
+    assert!(again.args.last().is_some_and(|s| s.contains("calls were refused")), "{:?}", again.args.last());
+    let stdin = String::from_utf8(again.stdin.clone()).unwrap();
+    assert!(stdin.contains(r#"propose_node {\"text\":\"Inflation\"}: refused: the key n1 is taken"#), "{stdin}");
+    let lines = answer(&[r#"{"calls": [{"name": "propose_node", "input": {"text": "Prices"}}], "summary": "Fixed."}"#]);
+    let fixed = claude::send(&Fake { lines }, &next, vec![], &mut |_| ControlFlow::Continue(())).unwrap();
+    let ids: Vec<String> = claude::tool_calls(&fixed.message).into_iter().map(|c| c.id).collect();
+    assert_eq!(ids, vec!["claude_code_2".to_owned()], "not the id of the refused call");
     // A reply that isn't JSON is an error, not an empty proposal.
     let lines = answer(&["I would add a node."]);
     let mut seen = Vec::new();

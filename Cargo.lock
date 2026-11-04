@@ -4582,6 +4582,7 @@ dependencies = [
  "pdfcraft-ai",
  "rustix 1.1.5",
  "security-framework",
+ "serde_json",
  "thiserror 2.0.21",
  "ureq",
  "zbus",
