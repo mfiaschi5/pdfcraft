@@ -368,6 +368,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("ai.ask", "AI assistant", None, None, Document, "sparkles"),
     c("map.open", "Concept map", VIEW, None, Nothing, "share-2"),
     c("map.add_selection", "Add selection to map", None, Some(Shortcut::cmd_shift("M")), Copying, "share-2"),
+    c("wiki.add_selection", "Add selection to wiki", None, Some(Shortcut::cmd_shift("K")), Copying, "book-open"),
     c("export.all_images", "Export all images…", FILE, None, Copying, "image"),
     c("edit.header_footer", "Add header & footer…", None, None, Modification, "heading"),
     c("edit.header_footer.update", "Update header & footer…", None, None, Marks(crate::MarkKind::HeaderFooter), "heading"),

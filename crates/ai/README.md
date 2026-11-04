@@ -38,8 +38,9 @@ pub enum Event { Started, Text { block, text }, Citation { block, source }, WebS
                  ProviderError { kind, message }, Skipped { what } }
 
 // Citations (source.rs)
-pub enum Source { ThisDocument { page, quote }, Library { sha256, page, quote }, Web { url, title, quote } }
-SourceId::{ThisDocument { page }, Library { sha256, page }}   // "pdfcraft-doc:i3", "pdfcraft-lib:<sha256>:i3"
+pub enum Source { ThisDocument { page, quote }, Library { sha256, page, quote }, Web { url, title, quote }, Wiki { page, quote } }
+SourceId::{ThisDocument { page }, Library { sha256, page }, Wiki { page }}   // "pdfcraft-doc:i3", "pdfcraft-lib:<sha256>:i3", "pdfcraft-wiki:<sha256>"
+SourceId::wiki_page(file)   // a wiki page, by the SHA-256 of its file name
 Sha256::of(bytes) ; DocRef { sha256, size }
 
 // Library (library/)

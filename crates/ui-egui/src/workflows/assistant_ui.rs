@@ -112,6 +112,10 @@ pub struct AssistantPrefs {
     /// The user allowed requests to this provider (asked once).
     pub consented: bool,
     pub provider: Provider,
+    /// The wiki's folder (`wiki_ui`); `None` until the user chooses one.
+    pub wiki_folder: Option<String>,
+    /// Answers read the wiki's pages about the question.
+    pub use_wiki: bool,
 }
 
 impl Default for AssistantPrefs {
@@ -124,6 +128,8 @@ impl Default for AssistantPrefs {
             preview: true,
             consented: false,
             provider: Provider::ApiKey,
+            wiki_folder: None,
+            use_wiki: true,
         }
     }
 }
@@ -257,6 +263,8 @@ pub enum PanelAction {
     Stop,
     Jump(Source),
     SaveAsComment(usize),
+    /// File the answer in the wiki: the assistant proposes where it goes.
+    SaveToWiki(usize),
     OpenPreferences,
     AddToLibrary,
     RemoveFromLibrary(Sha256),
@@ -472,6 +480,9 @@ fn turn_ui(ui: &mut egui::Ui, t: &Tokens, turn: &Turn, index: usize, page_count:
                 if ui.small_button(tl!("Save as comment")).clicked() {
                     action = Some(PanelAction::SaveAsComment(index));
                 }
+                if ui.small_button(tl!("Save to wiki")).on_hover_text(tl!("The assistant proposes where the answer goes in your wiki")).clicked() {
+                    action = Some(PanelAction::SaveToWiki(index));
+                }
             });
         }
     });
@@ -491,6 +502,7 @@ fn citation_label(source: &Source, n: usize, page_count: usize) -> (String, Stri
             format!("{}\n“{quote}”", crate::i18n::fmt(tl!("Library document, page {n}"), &[("n", &(u64::from(*page) + 1).to_string())])),
         ),
         Source::Web { url, title, quote } => (format!("[{n}]"), format!("{title}\n{url}\n“{quote}”")),
+        Source::Wiki { quote, .. } => (format!("[{n}]"), format!("{}\n“{quote}”", tl!("Your wiki"))),
     }
 }
 
@@ -646,7 +658,7 @@ impl PdfCraftApp {
         self.assistant.library_file.clone().or_else(library_path)
     }
 
-    fn library_mut(&mut self) -> &mut Library {
+    pub(crate) fn library_mut(&mut self) -> &mut Library {
         if self.assistant.library.is_none() {
             let loaded = self
                 .library_file()
@@ -706,6 +718,12 @@ impl PdfCraftApp {
         let exclude = self.session.library_exclusions(id, &library);
         passages.extend(assistant::library_passages(&library, &question, Some(&ctx), &exclude, LIBRARY_PASSAGES));
         self.assistant.library = Some(library);
+        // The wiki's pages about the question, once it has been read.
+        if self.assistant.prefs.use_wiki
+            && let Some(index) = &self.wiki.index
+        {
+            passages.extend(index.passages(&question, crate::wiki_ui::WIKI_PASSAGES));
+        }
         passages.truncate(claude::MAX_PASSAGES);
         let turn = claude::user_turn(&passages, None, &question).map_err(|e| e.to_string())?;
         let model = self.assistant.prefs.model();
@@ -762,6 +780,7 @@ impl PdfCraftApp {
             }
             PanelAction::Jump(source) => self.jump_to_source(index, source),
             PanelAction::SaveAsComment(turn) => self.save_answer_as_comment(index, turn),
+            PanelAction::SaveToWiki(turn) => self.save_answer_to_wiki(index, turn),
             PanelAction::OpenPreferences => {
                 self.refresh_key_status();
                 self.run_command("app.preferences");
@@ -903,6 +922,7 @@ impl PdfCraftApp {
                 }
             }
             Source::Web { url, .. } => self.request_document_url(&url, crate::LinkOrigin::Assistant),
+            Source::Wiki { page, .. } => self.open_wiki_page_by_id(&page),
         }
     }
 
@@ -938,6 +958,38 @@ impl PdfCraftApp {
         }
     }
 
+    /// Ask the assistant to file an answer in the wiki, quoting the passages the conversation sent.
+    fn save_answer_to_wiki(&mut self, index: usize, turn: usize) {
+        let Some(view) = self.views.get(index) else { return };
+        let Some(conversation) = self.assistant.conversations.get(&view.id) else { return };
+        let Some(turn) = conversation.turns.get(turn) else { return };
+        if self.wiki_folder().is_none() {
+            self.choose_right_panel(Some(crate::RightPanel::Wiki));
+            self.notify_tr("Choose where to keep the wiki first.");
+            return;
+        }
+        let passages: Vec<Passage> = conversation
+            .history
+            .iter()
+            .flat_map(|m| m.content.iter())
+            .filter(|b| b.get("type").and_then(serde_json::Value::as_str) == Some("search_result"))
+            .filter_map(|b| {
+                let id = SourceId::parse(b.get("source")?.as_str()?)?;
+                let title = b.get("title").and_then(serde_json::Value::as_str).unwrap_or_default().to_owned();
+                let text = b.get("content")?.as_array()?.iter().filter_map(|c| c.get("text")?.as_str()).collect::<Vec<_>>().join("\n");
+                Some(Passage { id, title, text })
+            })
+            .collect();
+        let request = crate::i18n::fmt(
+            tl!(
+                "Add what this answer says to the wiki, on the pages it belongs to, quoting the passages it relies on as snippets.\n\nQuestion: {question}\n\nAnswer: {answer}"
+            ),
+            &[("question", &turn.question), ("answer", &turn.answer_text())],
+        );
+        self.start_wiki_edit(request, passages);
+        self.choose_right_panel(Some(crate::RightPanel::Wiki));
+    }
+
     fn save_answer_as_comment(&mut self, index: usize, turn: usize) {
         let Some(view) = self.views.get(index) else { return };
         let Some(turn) = self.assistant.conversations.get(&view.id).and_then(|c| c.turns.get(turn)) else { return };
@@ -951,6 +1003,7 @@ impl PdfCraftApp {
                 Source::ThisDocument { page, .. } => crate::i18n::fmt(tl!("page {n}"), &[("n", &(u64::from(*page) + 1).to_string())]),
                 Source::Library { page, .. } => crate::i18n::fmt(tl!("library document, page {n}"), &[("n", &(u64::from(*page) + 1).to_string())]),
                 Source::Web { url, .. } => url.clone(),
+                Source::Wiki { .. } => tl!("your wiki").to_string(),
             })
             .collect();
         if !cited.is_empty() {

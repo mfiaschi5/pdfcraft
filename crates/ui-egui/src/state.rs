@@ -56,6 +56,8 @@ pub enum RightPanel {
     Assistant,
     /// The concept map beside the document: add the selection and connect it while reading.
     Map,
+    /// The wiki beside the document: pages of notes with snippets, kept in a folder.
+    Wiki,
 }
 
 /// Quick-action bar tools (the vertical floating strip).

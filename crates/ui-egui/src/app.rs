@@ -207,6 +207,7 @@ impl PdfCraftApp {
             assistant: Default::default(),
             ai_service: None,
             maps: Default::default(),
+            wiki: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             drive: Default::default(),
             js_console: Default::default(),
@@ -583,6 +584,7 @@ impl eframe::App for PdfCraftApp {
         self.poll_updates();
         self.poll_assistant();
         self.poll_map();
+        self.poll_wiki();
         let (ask, map) = (self.assistant.prefs.enabled, self.maps.available());
         for view in &mut self.views {
             view.ask_enabled = ask;

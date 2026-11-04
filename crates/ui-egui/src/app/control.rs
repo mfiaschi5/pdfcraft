@@ -71,6 +71,7 @@ impl PdfCraftApp {
                     "compare" => Some(RightPanel::Compare),
                     "assistant" => Some(RightPanel::Assistant),
                     "map" => Some(RightPanel::Map),
+                    "wiki" => Some(RightPanel::Wiki),
                     "none" => None,
                     other => return Err(format!("unknown panel {other}")),
                 }

@@ -86,4 +86,5 @@ mod ui;
 mod updates;
 mod view;
 mod viewer;
+mod wiki;
 mod xfa;

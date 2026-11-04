@@ -419,6 +419,8 @@ fn app_creator<'a>(
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.ai_service = Some(ai_service());
         app.maps.dir = pdfcraft_ui_egui::maps_dir();
+        // Where Google Drive for desktop keeps its folders (File ▸ Save to Google Drive, the wiki).
+        app.drive.home = std::env::var_os("HOME").map(std::path::PathBuf::from);
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
         #[cfg(target_os = "macos")]
         {

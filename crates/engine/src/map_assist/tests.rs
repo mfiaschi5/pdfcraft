@@ -26,6 +26,7 @@ fn anchor(p: &Passage, quote: &str) -> Option<Anchor> {
     let (sha256, page) = match p.id {
         SourceId::ThisDocument { page } => ("ab".repeat(32), page),
         SourceId::Library { sha256, page } => (sha256.to_hex(), page),
+        SourceId::Wiki { .. } => return None,
     };
     Some(Anchor { sha256, paths: vec![], title: p.title.clone(), page, rect: None, quote: quote.to_owned() })
 }

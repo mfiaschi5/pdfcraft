@@ -24,6 +24,23 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let mut compare_action: Option<crate::compare_ui::PanelAction> = None;
     let mut assistant_action: Option<crate::assistant_ui::PanelAction> = None;
     let mut map_actions: Vec<crate::map_ui::Action> = Vec::new();
+    let mut wiki_actions: Vec<crate::wiki_ui::Action> = Vec::new();
+    if panel == RightPanel::Wiki {
+        app.ensure_wiki();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let drive = {
+        let home = app.drive.home.clone();
+        panel == RightPanel::Wiki && app.wiki_folder().is_none() && !pdfcraft_platform::drive::accounts(home.as_deref()).is_empty()
+    };
+    #[cfg(target_arch = "wasm32")]
+    let drive = false;
+    let wiki_here = crate::wiki_ui::Here {
+        folder: app.wiki_folder(),
+        drive,
+        can_add: app.session.get(id).is_some_and(|d| d.allows_copying()) && app.views.get(index).is_some_and(|v| v.assistant_selection().is_some()),
+        has_doc: true,
+    };
     let here = crate::map_ui::Here {
         sha256: app.session.document_sha256(id).map(|h| h.to_hex()),
         path: app.session.get(id).and_then(|d| d.path.clone()),
@@ -47,6 +64,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         let compare = &app.compare;
         let assistant = &mut app.assistant;
         let maps = &mut app.maps;
+        let wiki = &mut app.wiki;
         let comment_allowed = doc.allows_annotation();
         // A dialog or the palette owns the keyboard: the panel leaves Escape to it.
         let modal = app.dialog.is_some() || app.palette_open;
@@ -69,6 +87,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     RightPanel::Compare => ("Compare", compare.as_ref().filter(|c| c.new == id).map(|c| c.result.changes.len())),
                     RightPanel::Assistant => ("AI assistant", None),
                     RightPanel::Map => ("Concept map", Some(maps.graph.nodes().len())),
+                    RightPanel::Wiki => ("Wiki", wiki.wiki.as_ref().map(|w| w.pages.len())),
                 };
                 // Comments count like Acrobat (no replies); the replies go in small text below.
                 let replies = if panel == RightPanel::Comments { crate::comments_panel::reply_count(info) } else { 0 };
@@ -291,6 +310,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         assistant_action = crate::assistant_ui::panel(ui, &t, assistant, id, info.pages.len(), has_ai_service, has_claude_code)
                     }
                     RightPanel::Map => map_actions = crate::map_ui::panel(ui, &t, maps, &here),
+                    RightPanel::Wiki => wiki_actions = crate::wiki_ui::panel(ui, &t, wiki, &wiki_here),
                     RightPanel::Attachments => {
                         let attachable = doc.allows_modification() && doc.read_only_reason.is_none();
                         if attachable {
@@ -413,6 +433,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         app.assistant_action(index, a);
     }
     crate::map_ui::run_panel(app, map_actions);
+    crate::wiki_ui::run_panel(app, wiki_actions);
     match sig_action {
         Some(crate::sign_ui::PanelAction::Validate) => app.run_command("sign.validate"),
         Some(crate::sign_ui::PanelAction::GoTo(p)) => app.views[index].go_to_page(p),

@@ -747,6 +747,10 @@ impl PdfCraftApp {
                 self.refresh_key_status();
             }
             "map.open" => self.open_map_workspace(),
+            "wiki.add_selection" => match active {
+                Some(i) => self.add_selection_to_wiki(i),
+                None => return Some(false),
+            },
             "map.add_selection" => match active {
                 Some(i) => self.add_selection_to_map(i),
                 None => return Some(false),

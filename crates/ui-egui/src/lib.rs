@@ -188,6 +188,7 @@ use workflows::ocr_ui;
 use workflows::optimize_ui;
 use workflows::print_ui;
 use workflows::web_print;
+use workflows::wiki_ui;
 
 /// Files dropped on a document's page grid or its Pages panel.
 struct GridDrop {
@@ -519,6 +520,8 @@ pub struct PdfCraftApp {
     pub ai_service: Option<assistant_ui::AiService>,
     /// The concept map workspace: the map shown, its undo steps, and the assistant's proposal.
     pub maps: map_ui::MapState,
+    /// The wiki beside the document: its pages, the selection waiting for a page, the assistant's proposal.
+    pub wiki: wiki_ui::WikiState,
     /// File ▸ Save to Google Drive: the folder last saved to, and the dialog.
     #[cfg(not(target_arch = "wasm32"))]
     pub drive: drive_ui::DriveState,

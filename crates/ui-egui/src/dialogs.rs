@@ -162,6 +162,12 @@ fn dialog_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, dialog: Dialog, req: &m
             (req.drive, req.close) = crate::drive_ui::body(ui, app);
             return false;
         }
+        // The web app has no Drive for desktop; its command never opens this.
+        #[cfg(target_arch = "wasm32")]
+        Dialog::SaveToDrive => {
+            req.close = true;
+            return false;
+        }
         Dialog::CreateImages => {
             let (go, cancel) = crate::create_ui::image_import_body(ui, app);
             req.images_now = go;

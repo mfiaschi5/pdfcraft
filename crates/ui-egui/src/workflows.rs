@@ -16,3 +16,4 @@ pub(super) mod ocr_ui;
 pub(super) mod optimize_ui;
 pub(super) mod print_ui;
 pub(super) mod web_print;
+pub(super) mod wiki_ui;

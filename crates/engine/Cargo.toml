@@ -25,6 +25,7 @@ pdfcraft-audit = { workspace = true }
 pdfcraft-ai = { workspace = true }
 # Concept maps, and the AI's proposals for them (`map_assist`).
 pdfcraft-graph = { workspace = true }
+pdfcraft-wiki = { workspace = true }
 serde_json = { workspace = true }
 pdfcraft-redact = { workspace = true }
 pdfcraft-print = { workspace = true }

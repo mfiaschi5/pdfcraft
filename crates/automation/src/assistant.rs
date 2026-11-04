@@ -101,6 +101,7 @@ fn source_json(id: &SourceId) -> Value {
     match id {
         SourceId::ThisDocument { page } => json!({"kind": "this_document", "page": u64::from(*page) + 1}),
         SourceId::Library { sha256, page } => json!({"kind": "library", "sha256": sha256.to_hex(), "page": u64::from(*page) + 1}),
+        SourceId::Wiki { page } => json!({"kind": "wiki", "page": page.to_hex()}),
     }
 }
 
@@ -397,6 +398,8 @@ fn citation_json(source: &Source, pages: usize, library: Option<&Library>) -> Op
             })
         }
         Source::Web { url, title, quote } => Some(json!({"kind": "web", "url": url, "title": title, "quote": quote})),
+        // Headless questions send no wiki passages, so none can be cited.
+        Source::Wiki { .. } => None,
     }
 }
 

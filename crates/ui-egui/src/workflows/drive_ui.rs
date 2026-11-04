@@ -14,7 +14,8 @@ use crate::{PdfCraftApp, widgets};
 /// Saving to Drive: where to look for its folders, the folder last saved to, and the dialog.
 #[derive(Default)]
 pub struct DriveState {
-    /// The home folder Drive's folders are under; tests point it elsewhere.
+    /// The home folder Drive's folders are under: the user's, set by the desktop app; tests point
+    /// it elsewhere, and leave it unset for no Drive.
     pub home: Option<PathBuf>,
     /// The folder last saved to, kept in the settings.
     pub last: Option<PathBuf>,
@@ -105,7 +106,7 @@ impl PdfCraftApp {
     pub(crate) fn open_save_to_drive(&mut self) {
         let Some((_, doc)) = self.active_ids() else { return };
         let Some(name) = self.session.get(doc).map(|d| d.name.clone()) else { return };
-        let home = self.drive.home.clone().or_else(|| std::env::var_os("HOME").map(PathBuf::from));
+        let home = self.drive.home.clone();
         let accounts = drive::accounts(home.as_deref());
         // The folder last saved to, while it is still there in one of the accounts.
         let last = self.drive.last.clone().filter(|l| l.is_dir());

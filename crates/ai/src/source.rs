@@ -90,13 +90,16 @@ impl DocRef {
 
 const DOC_PREFIX: &str = "pdfcraft-doc:i";
 const LIB_PREFIX: &str = "pdfcraft-lib:";
+const WIKI_PREFIX: &str = "pdfcraft-wiki:";
 
 /// The `source` of a passage sent to the provider: `pdfcraft-doc:i<page>` for the document being
-/// read, `pdfcraft-lib:<sha256>:i<page>` for a library document (`i` for page index).
+/// read, `pdfcraft-lib:<sha256>:i<page>` for a library document (`i` for page index), and
+/// `pdfcraft-wiki:<sha256>` for a page of the user's wiki, named by the hash of its file name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SourceId {
     ThisDocument { page: u32 },
     Library { sha256: Sha256, page: u32 },
+    Wiki { page: Sha256 },
 }
 
 impl SourceId {
@@ -104,7 +107,13 @@ impl SourceId {
         match self {
             Self::ThisDocument { page } => format!("{DOC_PREFIX}{page}"),
             Self::Library { sha256, page } => format!("{LIB_PREFIX}{sha256}:i{page}"),
+            Self::Wiki { page } => format!("{WIKI_PREFIX}{page}"),
         }
+    }
+
+    /// The id of the wiki page stored in file `file`.
+    pub fn wiki_page(file: &str) -> Self {
+        Self::Wiki { page: Sha256::of(file.as_bytes()) }
     }
 
     /// Parse a `source` string. Anything not in exactly the form [`Self::encode`] writes is `None`.
@@ -112,14 +121,21 @@ impl SourceId {
         if let Some(page) = s.strip_prefix(DOC_PREFIX) {
             return Some(Self::ThisDocument { page: parse_page(page)? });
         }
+        if let Some(hash) = s.strip_prefix(WIKI_PREFIX) {
+            return lower_hex(hash).then(|| Sha256::from_hex(hash)).flatten().map(|page| Self::Wiki { page });
+        }
         let rest = s.strip_prefix(LIB_PREFIX)?;
         let (hash, page) = rest.split_once(":i")?;
-        // Lowercase only, as `encode` writes it, so one hash has one spelling.
-        if !hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        if !lower_hex(hash) {
             return None;
         }
         Some(Self::Library { sha256: Sha256::from_hex(hash)?, page: parse_page(page)? })
     }
+}
+
+/// Lowercase only, as `encode` writes it, so one hash has one spelling.
+fn lower_hex(s: &str) -> bool {
+    s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 /// Decimal digits only, no sign, no leading zeros: one spelling per page, so a string the model
@@ -136,9 +152,25 @@ fn parse_page(s: &str) -> Option<u32> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Source {
-    ThisDocument { page: u32, quote: String },
-    Library { sha256: Sha256, page: u32, quote: String },
-    Web { url: String, title: String, quote: String },
+    ThisDocument {
+        page: u32,
+        quote: String,
+    },
+    Library {
+        sha256: Sha256,
+        page: u32,
+        quote: String,
+    },
+    Web {
+        url: String,
+        title: String,
+        quote: String,
+    },
+    /// A page of the user's wiki ([`SourceId::Wiki`]).
+    Wiki {
+        page: Sha256,
+        quote: String,
+    },
 }
 
 impl Source {
@@ -147,12 +179,13 @@ impl Source {
         match id {
             SourceId::ThisDocument { page } => Self::ThisDocument { page, quote },
             SourceId::Library { sha256, page } => Self::Library { sha256, page, quote },
+            SourceId::Wiki { page } => Self::Wiki { page, quote },
         }
     }
 
     pub fn quote(&self) -> &str {
         match self {
-            Self::ThisDocument { quote, .. } | Self::Library { quote, .. } | Self::Web { quote, .. } => quote,
+            Self::ThisDocument { quote, .. } | Self::Library { quote, .. } | Self::Web { quote, .. } | Self::Wiki { quote, .. } => quote,
         }
     }
 }
@@ -178,7 +211,12 @@ mod tests {
     #[test]
     fn source_ids_round_trip_and_reject_lookalikes() {
         let h = Sha256::of(b"x");
-        for id in [SourceId::ThisDocument { page: 0 }, SourceId::ThisDocument { page: u32::MAX }, SourceId::Library { sha256: h, page: 41 }] {
+        for id in [
+            SourceId::ThisDocument { page: 0 },
+            SourceId::ThisDocument { page: u32::MAX },
+            SourceId::Library { sha256: h, page: 41 },
+            SourceId::wiki_page("Rates.md"),
+        ] {
             assert_eq!(SourceId::parse(&id.encode()), Some(id));
         }
         assert_eq!(SourceId::ThisDocument { page: 3 }.encode(), "pdfcraft-doc:i3");
@@ -197,6 +235,17 @@ mod tests {
         }
         assert_eq!(SourceId::parse(&format!("pdfcraft-lib:{h}:i1:i2")), None);
         assert_eq!(SourceId::parse(&format!("pdfcraft-lib:{}:i1", h.to_hex().to_uppercase())), None);
+        // A wiki page is named by the hash of its file name, in one spelling.
+        assert_eq!(SourceId::wiki_page("Rates.md"), SourceId::Wiki { page: Sha256::of(b"Rates.md") });
+        assert_eq!(SourceId::wiki_page("Rates.md").encode(), format!("pdfcraft-wiki:{}", Sha256::of(b"Rates.md")));
+        for bad in [
+            format!("pdfcraft-wiki:{}", h.to_hex().to_uppercase()),
+            format!("pdfcraft-wiki:{h}:i1"),
+            "pdfcraft-wiki:".to_owned(),
+            "pdfcraft-wiki:ab".to_owned(),
+        ] {
+            assert_eq!(SourceId::parse(&bad), None, "{bad}");
+        }
     }
 
     #[test]
