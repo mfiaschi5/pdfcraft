@@ -52,6 +52,7 @@ mod identity;
 mod javascript;
 mod layer_actions;
 mod links;
+mod map_graph;
 mod maps;
 mod marks;
 mod object_selection;

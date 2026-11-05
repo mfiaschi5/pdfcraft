@@ -30,6 +30,8 @@ use pdfcraft_graph::proposal::{Change, NodeRef, Proposal};
 use pdfcraft_graph::{Anchor, Author, Content, EdgeId, Graph, History, ImageBytes, KindId, Line, NodeId, Strength, export, layout};
 
 use crate::PdfCraftApp;
+
+mod graph_panel;
 use crate::theme::{self, Tokens};
 
 /// A node's width on the map at 100%.
@@ -94,6 +96,28 @@ pub struct MapState {
     /// Where maps are kept: [`maps_dir`] in the desktop app, a folder of their own in tests, and
     /// none on the web, where maps aren't offered.
     pub dir: Option<PathBuf>,
+    /// The graph in the panel beside the document: how far it is zoomed and moved from fitting.
+    pub(crate) panel_view: PanelView,
+    /// A node's passage to mark once its document is open (it was opening when the node was
+    /// clicked).
+    pending_mark: Option<PendingMark>,
+}
+
+/// The panel's graph, zoomed and moved from where it fits the panel.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PanelView {
+    pub zoom: f32,
+    pub pan: egui::Vec2,
+}
+
+impl Default for PanelView {
+    fn default() -> Self {
+        Self { zoom: 1.0, pan: egui::Vec2::ZERO }
+    }
+}
+
+struct PendingMark {
+    anchor: Anchor,
 }
 
 /// The desktop app's folder for maps: `Maps` in the assistant's folder.
@@ -126,6 +150,8 @@ impl Default for MapState {
             review: None,
             running: None,
             dir: None,
+            panel_view: PanelView::default(),
+            pending_mark: None,
         }
     }
 }
@@ -433,6 +459,36 @@ impl PdfCraftApp {
         }
     }
 
+    /// Go to a node's passage and mark where it starts and ends; a document that has to open
+    /// first is marked once it is.
+    pub(crate) fn reveal_anchor(&mut self, anchor: &Anchor) {
+        self.open_anchor(anchor);
+        self.maps.pending_mark = Some(PendingMark { anchor: anchor.clone() });
+        self.apply_pending_mark();
+    }
+
+    /// Mark the pending passage once its document is in a tab.
+    fn apply_pending_mark(&mut self) {
+        let Some(pending) = &self.maps.pending_mark else { return };
+        let a = &pending.anchor;
+        let sha = Sha256::from_hex(&a.sha256);
+        let by_bytes = self.views.iter().position(|v| sha.is_some() && self.session.document_sha256(v.id) == sha);
+        let by_path =
+            || self.views.iter().position(|v| self.session.get(v.id).and_then(|d| d.path.as_deref()).is_some_and(|p| a.paths.iter().any(|q| q == p)));
+        match by_bytes.or_else(by_path) {
+            Some(i) => {
+                let Some(PendingMark { anchor }) = self.maps.pending_mark.take() else { return };
+                self.active = Some(i);
+                if let Some(view) = self.views.get_mut(i) {
+                    view.mark_passage(usize::try_from(anchor.page).unwrap_or(usize::MAX), &anchor.quote, anchor.rect);
+                }
+            }
+            // Not opening (any more): nothing to mark.
+            None if self.assistant.jump_after_open.is_none() => self.maps.pending_mark = None,
+            None => {}
+        }
+    }
+
     /// Ask the assistant for changes to the map, on a worker thread.
     fn start_map_edit(&mut self) {
         let Some(service) = self.ai_service.clone() else { return };
@@ -532,6 +588,7 @@ impl PdfCraftApp {
 
     /// Take the assistant's proposal once it has come.
     pub(crate) fn poll_map(&mut self) {
+        self.apply_pending_mark();
         let Some(running) = &self.maps.running else { return };
         let result = match running.rx.try_recv() {
             Ok(result) => result,
@@ -660,6 +717,10 @@ pub(crate) enum Action {
     OpenWhole,
     /// The panel: add the document's selection.
     AddSelection,
+    /// The panel's graph: pick the node and go to its passage, marked where it starts and ends.
+    Reveal(NodeId),
+    /// The panel's graph: fit it to the panel again.
+    FitGraph,
 }
 
 /// The map workspace, in the document area.
@@ -1210,7 +1271,14 @@ fn run(app: &mut PdfCraftApp, action: Action) {
                 g.set_edge(id, kind, strength, label).map_err(|e| e.to_string())
             });
         }
-        Action::OpenSource(anchor) => app.open_anchor(&anchor),
+        Action::OpenSource(anchor) => app.reveal_anchor(&anchor),
+        Action::Reveal(id) => {
+            app.maps.picked = Some(Picked::Node(id));
+            if let Some(a) = app.maps.graph.node(id).and_then(|n| n.anchor.clone()) {
+                app.reveal_anchor(&a);
+            }
+        }
+        Action::FitGraph => app.maps.panel_view = PanelView::default(),
         Action::Export(format) => app.export_map(format),
         Action::Ask => app.start_map_edit(),
         Action::StopAsk => {
@@ -1273,6 +1341,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, here: &H
             actions.push(Action::Undo);
         }
     });
+    graph_panel::show(ui, t, maps, here, &mut actions);
     let tip = crate::commands::command_tip(ui.ctx(), tl!("Add the selected text to the map ({key})"), "map.add_selection");
     if ui.add_enabled(here.can_add, egui::Button::new(tl!("Add the selection"))).on_hover_text(tip).clicked() {
         actions.push(Action::AddSelection);

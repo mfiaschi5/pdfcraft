@@ -26,6 +26,7 @@ mod find;
 pub(super) mod fling;
 pub(super) mod image_pick;
 mod navigation;
+pub(crate) mod node_mark;
 mod organize;
 pub(super) mod page_cursor;
 pub(super) mod page_pointer;
@@ -502,6 +503,8 @@ pub struct DocView {
     single_edges: Option<(usize, bool, bool)>,
     /// Briefly outline an annotation after navigating to it from a panel.
     pub flash: Option<(usize, [f32; 4], f64)>,
+    /// A concept-map node's passage, marked where it starts and ends (`node_mark`).
+    pub(crate) node_mark: Option<node_mark::NodeMark>,
     /// Compare files: differences shaded on this document's pages (page, user-space box, colour).
     pub compare_marks: Vec<(usize, [f32; 4], Color32)>,
     /// Full screen (Acrobat's Full Screen Mode): the display saved on entering it, while the view
@@ -928,6 +931,7 @@ impl DocView {
             key_scroll: 0.0,
             single_edges: None,
             flash: None,
+            node_mark: None,
             compare_marks: Vec::new(),
             presentation: None,
             pages: HashMap::new(),
@@ -1061,6 +1065,7 @@ impl DocView {
         self.goto_point = None;
         self.zoom_anchor = None;
         self.flash = None;
+        self.refind_node_mark();
         // Thumbnail drags hold page indexes from before the change.
         self.panel_drag = None;
         self.org_drag = None;
@@ -2188,6 +2193,7 @@ fn page_overlays(ui: &mut egui::Ui, view: &mut DocView, frame: &mut PageFrame<'_
             painter.rect_filled(sr, CornerRadius::same(2), mc.gamma_multiply(0.28));
         }
     }
+    node_mark::paint(painter, &xf, i, view);
     if let Some((fp, fr, t0)) = view.flash
         && fp == i
     {

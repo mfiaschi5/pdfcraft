@@ -3132,3 +3132,13 @@ certificate	SHA-256 digest	Impronta SHA-256
 	{n} changes couldn't be made: {first}	{n} modifiche non sono state fatte: {first}
 	{n} changes made to the wiki	{n} modifiche fatte al wiki
 	{n} pages changed since, so they were left as they are.	{n} pagine sono cambiate nel frattempo, quindi sono state lasciate com'erano.
+	Add a snippet to start the map.	Aggiungi un estratto per iniziare la mappa.
+	Click a node to go to its passage.	Fai clic su un nodo per andare al suo passaggio.
+	Click to go to the passage	Fai clic per andare al passaggio
+	Click to pick it, to connect it	Fai clic per sceglierlo e collegarlo
+	Concept	Concetto
+	Drag to move the graph, pinch or Ctrl-scroll to zoom, double-click to fit it again	Trascina per spostare il grafo, avvicina le dita o usa Ctrl+rotella per lo zoom, doppio clic per adattarlo di nuovo
+	Map graph	Grafo della mappa
+	Picture	Immagine
+	Snippet	Estratto
+	from the assistant	dall'assistente
