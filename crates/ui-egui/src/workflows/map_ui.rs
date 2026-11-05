@@ -31,8 +31,12 @@ use pdfcraft_graph::{Anchor, Author, Content, EdgeId, Graph, History, ImageBytes
 
 use crate::PdfCraftApp;
 
-mod graph_panel;
+mod graph_view;
+mod window;
+
 use crate::theme::{self, Tokens};
+pub(crate) use graph_view::Doc as GraphDoc;
+pub(crate) use window::show as show_window;
 
 /// A node's width on the map at 100%.
 const NODE_WIDTH: f32 = 220.0;
@@ -96,24 +100,14 @@ pub struct MapState {
     /// Where maps are kept: [`maps_dir`] in the desktop app, a folder of their own in tests, and
     /// none on the web, where maps aren't offered.
     pub dir: Option<PathBuf>,
-    /// The graph in the panel beside the document: how far it is zoomed and moved from fitting.
-    pub(crate) panel_view: PanelView,
+    /// The graph in the panel beside the document, and in the map's own window.
+    pub(crate) panel_view: graph_view::GraphView,
+    pub(crate) window_view: graph_view::GraphView,
+    /// The map shows in a window of its own (another screen), as well as beside the document.
+    pub window: bool,
     /// A node's passage to mark once its document is open (it was opening when the node was
     /// clicked).
     pending_mark: Option<PendingMark>,
-}
-
-/// The panel's graph, zoomed and moved from where it fits the panel.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct PanelView {
-    pub zoom: f32,
-    pub pan: egui::Vec2,
-}
-
-impl Default for PanelView {
-    fn default() -> Self {
-        Self { zoom: 1.0, pan: egui::Vec2::ZERO }
-    }
 }
 
 struct PendingMark {
@@ -150,7 +144,9 @@ impl Default for MapState {
             review: None,
             running: None,
             dir: None,
-            panel_view: PanelView::default(),
+            panel_view: graph_view::GraphView::default(),
+            window_view: graph_view::GraphView::default(),
+            window: false,
             pending_mark: None,
         }
     }
@@ -719,8 +715,8 @@ pub(crate) enum Action {
     AddSelection,
     /// The panel's graph: pick the node and go to its passage, marked where it starts and ends.
     Reveal(NodeId),
-    /// The panel's graph: fit it to the panel again.
-    FitGraph,
+    /// The map in a window of its own, or not.
+    Window(bool),
 }
 
 /// The map workspace, in the document area.
@@ -1278,7 +1274,7 @@ fn run(app: &mut PdfCraftApp, action: Action) {
                 app.reveal_anchor(&a);
             }
         }
-        Action::FitGraph => app.maps.panel_view = PanelView::default(),
+        Action::Window(open) => app.set_map_window(open),
         Action::Export(format) => app.export_map(format),
         Action::Ask => app.start_map_edit(),
         Action::StopAsk => {
@@ -1323,7 +1319,7 @@ const PANEL_MATCHES: usize = 20;
 /// The map beside the document, for reading: add the selection, connect the node just added
 /// (or chosen) to others without leaving the page, follow its connections, and see what is on
 /// the map from this page.
-pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, here: &Here) -> Vec<Action> {
+pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, here: &Here, doc: Option<GraphDoc<'_>>) -> Vec<Action> {
     let mut actions = Vec::new();
     if !maps.available() {
         ui.label(egui::RichText::new(tl!("Concept maps need the desktop app")).color(t.text_muted));
@@ -1341,7 +1337,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, here: &H
             actions.push(Action::Undo);
         }
     });
-    graph_panel::show(ui, t, maps, here, &mut actions);
+    graph_view::show(ui, t, maps, graph_view::Host::Panel, here, doc, &mut actions);
     let tip = crate::commands::command_tip(ui.ctx(), tl!("Add the selected text to the map ({key})"), "map.add_selection");
     if ui.add_enabled(here.can_add, egui::Button::new(tl!("Add the selection"))).on_hover_text(tip).clicked() {
         actions.push(Action::AddSelection);

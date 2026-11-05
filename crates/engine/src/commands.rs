@@ -367,6 +367,8 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("a11y.tags", "Tags panel", None, None, Document, "tag"),
     c("ai.ask", "AI assistant", None, None, Document, "sparkles"),
     c("map.open", "Concept map", VIEW, None, Nothing, "share-2"),
+    c("map.window", "Concept map in a window", VIEW, None, Nothing, "app-window"),
+    c("map.focus_graph", "Go to the map's graph", None, Some(Shortcut::cmd_shift("E")), Nothing, "share-2"),
     c("map.add_selection", "Add selection to map", None, Some(Shortcut::cmd_shift("M")), Copying, "share-2"),
     c("wiki.add_selection", "Add selection to wiki", None, Some(Shortcut::cmd_shift("K")), Copying, "book-open"),
     c("export.all_images", "Export all images…", FILE, None, Copying, "image"),

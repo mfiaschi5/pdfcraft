@@ -31,6 +31,7 @@ mod organize;
 pub(super) mod page_cursor;
 pub(super) mod page_pointer;
 pub(super) mod page_router;
+mod passage_preview;
 pub mod scroll_speed;
 mod selection;
 pub(super) mod signature_drag;
@@ -505,6 +506,10 @@ pub struct DocView {
     pub flash: Option<(usize, [f32; 4], f64)>,
     /// A concept-map node's passage, marked where it starts and ends (`node_mark`).
     pub(crate) node_mark: Option<node_mark::NodeMark>,
+    /// The page a map preview wants rendered this frame, and the rasters kept for previews
+    /// (`passage_preview`).
+    passage_wanted: Option<usize>,
+    passage_rasters: Vec<(usize, u64, TextureHandle)>,
     /// Compare files: differences shaded on this document's pages (page, user-space box, colour).
     pub compare_marks: Vec<(usize, [f32; 4], Color32)>,
     /// Full screen (Acrobat's Full Screen Mode): the display saved on entering it, while the view
@@ -932,6 +937,8 @@ impl DocView {
             single_edges: None,
             flash: None,
             node_mark: None,
+            passage_wanted: None,
+            passage_rasters: Vec::new(),
             compare_marks: Vec::new(),
             presentation: None,
             pages: HashMap::new(),
@@ -3072,6 +3079,7 @@ fn plan_renders(ui: &egui::Ui, view: &mut DocView, info: &DocInfo, renders: Page
         tag: TEXT_TAG,
         preview: false,
     }));
+    queue.extend(view.passage_requests(info));
     view.frame_queue = queue;
     view.frame_visible = visible_now.iter().copied().collect();
 }
