@@ -113,22 +113,50 @@ fn a_preview_crops_the_page_around_its_passage() {
     let page = vec2(600.0, 800.0);
     // One line in the middle: a good part of the page wide at least, with room above and below.
     let line = [Rect::from_min_max(pos2(100.0, 400.0), pos2(260.0, 412.0))];
-    let crop = preview_crop(&line, page, 0.8);
+    let crop = preview_crop(&line, &[], page, 0.8);
     assert!(crop.contains_rect(line[0]), "{crop:?}");
     assert!(crop.width() >= 600.0 * MIN_CROP - 0.1 && crop.height() >= 12.0 + 2.0 * CONTEXT - 0.1);
     assert!(crop.width() < 600.0, "narrower than the page, so the words show large");
     assert!(Rect::from_min_size(Pos2::ZERO, page).contains_rect(crop));
     // A long passage: no taller than asked, starting where it starts.
     let lines: Vec<Rect> = (0..40).map(|i| Rect::from_min_max(pos2(50.0, 100.0 + i as f32 * 15.0), pos2(550.0, 112.0 + i as f32 * 15.0))).collect();
-    let crop = preview_crop(&lines, page, 0.5);
+    let crop = preview_crop(&lines, &[], page, 0.5);
     assert!(crop.height() <= crop.width() * 0.5 + 0.1);
     assert!(crop.min.y <= 100.0 && crop.max.y > 100.0, "the start shows: {crop:?}");
     // At the page's edge, the crop stays on the page.
     let edge = [Rect::from_min_max(pos2(560.0, 5.0), pos2(598.0, 15.0))];
-    let crop = preview_crop(&edge, page, 0.8);
+    let crop = preview_crop(&edge, &[], page, 0.8);
     assert!(Rect::from_min_size(Pos2::ZERO, page).expand(0.01).contains_rect(crop) && crop.contains_rect(edge[0]), "{crop:?}");
     // Nothing found yet: the whole page.
-    assert_eq!(preview_crop(&[], page, 0.8), Rect::from_min_size(Pos2::ZERO, page));
+    assert_eq!(preview_crop(&[], &[], page, 0.8), Rect::from_min_size(Pos2::ZERO, page));
+}
+
+#[test]
+fn a_preview_shows_whole_lines_of_the_passages_column() {
+    let page = vec2(1000.0, 800.0);
+    // A left column of lines 50..450 wide, 15 apart, and a right column beside it at 550..950.
+    let left: Vec<Rect> = (0..30).map(|i| Rect::from_min_max(pos2(50.0, 100.0 + i as f32 * 15.0), pos2(450.0, 111.0 + i as f32 * 15.0))).collect();
+    let right: Vec<Rect> = (0..30).map(|i| Rect::from_min_max(pos2(550.0, 100.0 + i as f32 * 15.0), pos2(950.0, 111.0 + i as f32 * 15.0))).collect();
+    let page_lines: Vec<Rect> = left.iter().chain(&right).copied().collect();
+    // The passage starts mid-line 10 and ends mid-line 11.
+    let passage = [Rect::from_min_max(pos2(260.0, 250.0), pos2(450.0, 261.0)), Rect::from_min_max(pos2(50.0, 265.0), pos2(200.0, 276.0))];
+    let crop = preview_crop(&passage, &page_lines, page, 0.8);
+    assert!(crop.min.x <= 50.0 && crop.max.x >= 450.0, "its lines whole across: {crop:?}");
+    assert!(crop.max.x < 550.0, "not the column beside it: {crop:?}");
+    for l in &left {
+        let inside = crop.contains_rect(*l);
+        let outside = !crop.intersects(*l);
+        assert!(inside || outside, "no line cut: {l:?} by {crop:?}");
+    }
+    assert!(left.iter().filter(|l| crop.contains_rect(**l)).count() >= 4, "the passage's lines and one around them");
+    // A long passage ends on a whole line, its start in view.
+    let long: Vec<Rect> = left.get(5..25).unwrap().to_vec();
+    let crop = preview_crop(&long, &page_lines, page, 0.3);
+    assert!(crop.height() <= crop.width() * 0.3 + 0.1, "{crop:?}");
+    assert!(crop.contains_rect(long[0]), "its start: {crop:?}");
+    for l in &left {
+        assert!(crop.contains_rect(*l) || !crop.intersects(*l), "no line cut: {l:?} by {crop:?}");
+    }
 }
 
 #[test]

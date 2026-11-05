@@ -132,8 +132,20 @@ fn the_map_is_drawn_as_round_nodes_and_hovering_one_grows_a_render_of_its_passag
     });
     assert!(rendered, "the passage's page is rendered into the preview");
     assert_eq!(h.state().views[0].current, 0, "the document stays where it was");
-    h.get_by_label("tassi.pdf, p. 2");
-    h.get_by_label("Click to go to the passage");
+    // The preview is the passage alone, large: no source, connections or hints around it.
+    let picture = h.get_by_label(render).rect();
+    assert!(picture.width() >= 500.0, "large enough to read: {picture:?}");
+    assert!(picture.height() <= 460.0, "no taller than a preview's picture, whole page or not: {picture:?}");
+    // Once the page's text is in, the picture is the page around the passage, not all of it.
+    let cropped = support::step_until(&mut h, |h| {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        h.state().views[0].has_page_text(1) && h.query_by_label(render).is_some_and(|n| n.rect().height() < n.rect().width() * 0.6)
+    });
+    assert!(cropped, "cropped around the passage: {:?}", h.get_by_label(render).rect());
+    h.run_steps(4);
+    shot(&mut h, "map-preview.png");
+    assert!(h.query_by_label("tassi.pdf, p. 2").is_none(), "no source line");
+    assert!(h.query_by(|n| n.label().is_some_and(|l| l.starts_with("\u{2190} ") || l.starts_with("\u{2192} "))).is_none(), "no connections");
     // Away from the node, it shrinks back and goes.
     h.get_by_label("Map graph").hover();
     let gone = support::step_until(&mut h, |h| {
@@ -141,13 +153,60 @@ fn the_map_is_drawn_as_round_nodes_and_hovering_one_grows_a_render_of_its_passag
         h.query_by_label(render).is_none()
     });
     assert!(gone, "the preview closes");
-    // A concept has no page: its text shows.
+    // A concept has no page: its text shows, and only its text.
+    let concept_text = |h: &Harness<'static, PdfCraftApp>| h.query_all_by_label("Politica monetaria").count();
+    let before = concept_text(&h);
     node(&h, "Politica monetaria").hover();
     let shown = support::step_until(&mut h, |h| {
         std::thread::sleep(std::time::Duration::from_millis(10));
-        h.query_by_label("Click to pick it, to connect it").is_some()
+        concept_text(h) > before
     });
-    assert!(shown);
+    assert!(shown, "the concept's text in its preview");
+}
+
+#[test]
+fn the_question_mark_opens_the_graphs_shortcuts() {
+    let (mut h, _) = harness("the_question_mark_opens_", true, None);
+    assert!(h.query_by_label("Graph shortcuts").is_none());
+    help_button(&h).click();
+    h.run_steps(3);
+    h.get_by_label("Graph shortcuts");
+    h.get_by_label("Move between nodes");
+    h.get_by_label("Connect it to the node it is dropped on");
+    shot(&mut h, "map-shortcuts.png");
+    let popup = h.get_by_label("Graph shortcuts").rect();
+    // A click elsewhere (on the document, left of the popup) closes it, and the "?" opens it again.
+    let away = egui::pos2(popup.min.x - 200.0, popup.max.y + 40.0);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: away, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.run_steps(3);
+    assert!(h.query_by_label("Graph shortcuts").is_none(), "closed by a click outside");
+    help_button(&h).click();
+    h.run_steps(3);
+    h.get_by_label("Graph shortcuts");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(h.query_by_label("Graph shortcuts").is_none(), "closed by Escape");
+}
+
+/// A picture of the app, into `PDFCRAFT_MAP_SHOTS` when it is set.
+fn shot(h: &mut Harness<'static, PdfCraftApp>, name: &str) {
+    if let Ok(dir) = std::env::var("PDFCRAFT_MAP_SHOTS") {
+        let _gpu = crate::gpu();
+        h.render().unwrap().save(std::path::Path::new(&dir).join(name)).unwrap();
+    }
+}
+
+/// The "?" in the graph's toolbar, just above the graph.
+fn help_button<'a>(h: &'a Harness<'static, PdfCraftApp>) -> egui_kittest::Node<'a> {
+    let frame = h.get_by_label("Map graph").rect();
+    h.get_by(move |n| {
+        n.role() == Role::Button
+            && n.label().as_deref() == Some("Keyboard shortcuts")
+            && n.bounding_box()
+                .is_some_and(|b| b.x0 as f32 >= frame.min.x - 1.0 && b.y1 as f32 <= frame.min.y + 1.0 && b.y0 as f32 >= frame.min.y - 40.0)
+    })
 }
 
 /// A mouse drag from `a` to `b`, with `modifiers` held.

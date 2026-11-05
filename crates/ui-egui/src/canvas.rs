@@ -506,10 +506,10 @@ pub struct DocView {
     pub flash: Option<(usize, [f32; 4], f64)>,
     /// A concept-map node's passage, marked where it starts and ends (`node_mark`).
     pub(crate) node_mark: Option<node_mark::NodeMark>,
-    /// The page a map preview wants rendered this frame, and the rasters kept for previews
-    /// (`passage_preview`).
-    passage_wanted: Option<usize>,
-    passage_rasters: Vec<(usize, u64, TextureHandle)>,
+    /// The crop of a page a map preview wants rendered this frame (page, view-space crop, device
+    /// pixels across), and the crops kept for previews (`passage_preview`).
+    passage_wanted: Option<(usize, egui::Rect, f32)>,
+    passage_rasters: Vec<passage_preview::PassageRaster>,
     /// Compare files: differences shaded on this document's pages (page, user-space box, colour).
     pub compare_marks: Vec<(usize, [f32; 4], Color32)>,
     /// Full screen (Acrobat's Full Screen Mode): the display saved on entering it, while the view
