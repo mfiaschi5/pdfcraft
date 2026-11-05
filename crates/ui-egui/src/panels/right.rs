@@ -309,7 +309,11 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     RightPanel::Assistant => {
                         assistant_action = crate::assistant_ui::panel(ui, &t, assistant, id, info.pages.len(), has_ai_service, has_claude_code)
                     }
-                    RightPanel::Map => map_actions = crate::map_ui::panel(ui, &t, maps, &here),
+                    RightPanel::Map => {
+                        // Previews render from the document beside the map.
+                        let graph_doc = here.sha256.clone().map(|sha256| crate::map_ui::GraphDoc { sha256, info, view: &mut *view });
+                        map_actions = crate::map_ui::panel(ui, &t, maps, &here, graph_doc);
+                    }
                     RightPanel::Wiki => wiki_actions = crate::wiki_ui::panel(ui, &t, wiki, &wiki_here),
                     RightPanel::Attachments => {
                         let attachable = doc.allows_modification() && doc.read_only_reason.is_none();

@@ -303,7 +303,9 @@ fn answers_read_the_wiki_and_a_citation_of_it_opens_the_page() {
     h.state_mut().assistant.draft = "And in spring?".into();
     h.run_steps(2);
     h.get_by_label("Ask").click();
-    support::wait_until(&mut h, "the second request", |app| app.assistant.conversations.values().any(|c| c.turns.len() == 2));
+    // The request is sent from the assistant's worker: wait until it has been.
+    let sent = support::step_until(&mut h, |_| queue.seen.lock().unwrap().len() >= 2);
+    assert!(sent, "the second question is sent");
     let body = String::from_utf8_lossy(&queue.seen.lock().unwrap()[1].body).into_owned();
     // The first question's wiki passage is replayed with the conversation; none is added.
     assert_eq!(body.matches("Wiki: Inflation").count(), 1, "{body}");
@@ -351,7 +353,9 @@ fn an_index_page_of_ones_own_is_never_written_over() {
     h.run_steps(3);
     assert!(read(&dir, "Rates.md").contains("> Rate"), "the change is made");
     assert_eq!(read(&dir, "index.md"), "# My index\n\nHand-made.\n", "the user's own index is left alone");
-    // One PdfCraft wrote is kept up to date.
+    // One PdfCraft wrote is kept up to date. (The page shown grows once the wiki is read again:
+    // wait for that, so the button is where it is clicked.)
+    open_wiki(&mut h, 1);
     std::fs::remove_file(dir.join("index.md")).unwrap();
     h.get_by_label("Undo last changes").click();
     h.run_steps(3);

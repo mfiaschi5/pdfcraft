@@ -143,6 +143,7 @@ impl DocView {
     pub fn invalidate_content(&mut self) {
         // Undo, redo and other document-wide changes: a released drawing's preview would be a ghost.
         self.comments.settling.clear();
+        self.drop_passage_raster(None);
         for p in self.pages.values_mut() {
             p.tag = STALE_TAG;
         }
@@ -176,6 +177,7 @@ impl DocView {
     /// Only `page` changed (a comment was added, edited or removed): re-render that page and
     /// re-read its text, keep everything else. Out-of-date tiles stay on screen until replacements arrive.
     pub fn page_changed(&mut self, page: usize) {
+        self.drop_passage_raster(Some(page));
         if let Some(p) = self.pages.get_mut(&page) {
             p.tag = STALE_TAG;
         }
@@ -287,6 +289,8 @@ impl DocView {
         self.thumbs.clear();
         self.grid_pages.clear();
         self.print_pages.clear();
+        self.passage_rasters.clear();
+        self.passage_wanted = None;
         self.stale_thumbs.clear();
         self.stale_tiles.clear();
         self.waiting_since.clear();
@@ -348,8 +352,9 @@ impl DocView {
                 grid.push(*req);
                 continue;
             }
-            // Print-preview rasters: a few sheets at the pane's size (the dialog bounds them).
-            if req.tag & PRINT_TAG != 0 {
+            // Print-preview rasters: a few sheets at the pane's size (the dialog bounds them);
+            // a map preview's page: one at a time, a few kept (`passage_preview`).
+            if req.tag & (PRINT_TAG | super::passage_preview::PASSAGE_TAG) != 0 {
                 if !self.errors.contains_key(&req.page) {
                     queue.push(*req);
                 }
@@ -413,7 +418,7 @@ impl DocView {
         // block: they are never re-requested.
         let visible_mains_pending = queue.iter().any(|r| {
             r.kind == RequestKind::Pixels
-                && r.tag & (GRID_TAG | PRINT_TAG | THUMB_TAG | TEXT_TAG) == 0
+                && r.tag & (GRID_TAG | PRINT_TAG | THUMB_TAG | TEXT_TAG | super::passage_preview::PASSAGE_TAG) == 0
                 && self.frame_visible.contains(&r.page)
                 && !self.errors.contains_key(&r.page)
         });
@@ -582,6 +587,8 @@ impl DocView {
             if !self.page_out_of_date(page) {
                 self.text_background.page_received(page);
             }
+        } else if r.request.tag & super::passage_preview::PASSAGE_TAG != 0 {
+            self.receive_passage(ctx, page, r.request.tag, img);
         } else if r.request.tag & PRINT_TAG != 0 {
             let tex = ctx.load_texture(
                 format!("print-{:?}-{page}", self.id),
@@ -621,7 +628,7 @@ impl DocView {
         let visible = req.tag & THUMB_TAG == 0 && self.frame_visible.contains(&req.page);
         // Organize-grid renders are bounded by the cells in view (organize_grid). Print
         // previews are the sheets around the one on screen.
-        if req.tag & (GRID_TAG | PRINT_TAG) != 0 {
+        if req.tag & (GRID_TAG | PRINT_TAG | super::passage_preview::PASSAGE_TAG) != 0 {
             return true;
         }
         if let Some(t) = req.tile {

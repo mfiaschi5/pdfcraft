@@ -114,7 +114,7 @@ pub fn locate(text: &PageText, quote: &str) -> Option<Range<usize>> {
 }
 
 /// The passage's lines as view-space boxes, in reading order.
-fn line_boxes(text: &PageText, range: Range<usize>) -> Vec<[f32; 4]> {
+pub fn line_boxes(text: &PageText, range: Range<usize>) -> Vec<[f32; 4]> {
     let mut out: Vec<(u32, [f32; 4])> = Vec::new();
     for i in range {
         let (Some(g), Some(&line)) = (text.glyphs.get(i), text.line_of.get(i)) else { break };
@@ -124,6 +124,27 @@ fn line_boxes(text: &PageText, range: Range<usize>) -> Vec<[f32; 4]> {
         }
     }
     out.into_iter().map(|(_, r)| r).collect()
+}
+
+/// The mark's blue, a passage's shading and its start and end markers.
+pub const MARK: Color32 = Color32::from_rgb(0x1B, 0x63, 0xE0);
+
+/// Shade a passage's line boxes (screen space) and mark where it starts, with a bar before the
+/// first word and a dot on top, and where it ends, with a bar after the last word and a dot below,
+/// as text selection handles are drawn. `size` scales the markers (1 on the page).
+pub fn paint_passage(painter: &egui::Painter, boxes: &[Rect], size: f32) {
+    let (Some(first), Some(last)) = (boxes.first().copied(), boxes.last().copied()) else { return };
+    for b in boxes {
+        painter.rect_filled(b.expand2(vec2(1.5, 1.0) * size), CornerRadius::same(2), MARK.gamma_multiply(0.18));
+    }
+    let bar = |top: Pos2, bottom: Pos2| painter.line_segment([top, bottom], Stroke::new(2.5 * size, MARK));
+    let gap = 2.0 * size;
+    let start_top = pos2(first.min.x - gap, first.min.y - 3.0 * size);
+    bar(start_top, pos2(first.min.x - gap, first.max.y + size));
+    painter.circle_filled(start_top - vec2(0.0, 3.5 * size), 4.5 * size, MARK);
+    let end_bottom = pos2(last.max.x + gap, last.max.y + 3.0 * size);
+    bar(pos2(last.max.x + gap, last.min.y - size), end_bottom);
+    painter.circle_filled(end_bottom + vec2(0.0, 3.5 * size), 4.5 * size, MARK);
 }
 
 /// Paint the mark on page `page`, if it is there.
@@ -146,20 +167,8 @@ pub(super) fn paint(painter: &egui::Painter, xf: &PageXform, page: usize, view: 
         (_, Some(rect)) => vec![xf.view_rect(rect)],
         _ => Vec::new(),
     };
-    let (Some(first), Some(last)) = (boxes.first().copied(), boxes.last().copied()) else { return };
-    let accent = Color32::from_rgb(0x1B, 0x63, 0xE0);
-    for b in &boxes {
-        painter.rect_filled(b.expand2(vec2(1.5, 1.0)), CornerRadius::same(2), accent.gamma_multiply(0.18));
-    }
-    // Where it starts: a bar before the first word with a dot on top; where it ends: a bar after
-    // the last word with a dot below, as text selection handles are drawn.
-    let bar = |top: Pos2, bottom: Pos2| painter.line_segment([top, bottom], Stroke::new(2.5, accent));
-    let start_top = pos2(first.min.x - 2.0, first.min.y - 3.0);
-    bar(start_top, pos2(first.min.x - 2.0, first.max.y + 1.0));
-    painter.circle_filled(start_top - vec2(0.0, 3.5), 4.5, accent);
-    let end_bottom = pos2(last.max.x + 2.0, last.max.y + 3.0);
-    bar(pos2(last.max.x + 2.0, last.min.y - 1.0), end_bottom);
-    painter.circle_filled(end_bottom + vec2(0.0, 3.5), 4.5, accent);
+    let Some(first) = boxes.first().copied() else { return };
+    paint_passage(painter, &boxes, 1.0);
     // A short pulse around the whole passage when it first shows, so the eye finds it.
     if age < PULSE {
         let all = boxes.iter().fold(first, |a, b| a.union(*b));

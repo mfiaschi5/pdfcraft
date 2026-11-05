@@ -69,7 +69,9 @@ fn map(sha: &str, path: Option<&str>) -> (Graph, Vec<NodeId>) {
     (g, ids)
 }
 
-fn harness(open: bool, file: Option<PathBuf>) -> (Harness<'static, PdfCraftApp>, Vec<NodeId>) {
+/// The app beside the map, its maps in a folder of `name`'s own (a map one test saves must not
+/// load into another's).
+fn harness(name: &str, open: bool, file: Option<PathBuf>) -> (Harness<'static, PdfCraftApp>, Vec<NodeId>) {
     let bytes = pdf();
     let sha = pdfcraft_ai::source::Sha256::of(&bytes).to_hex();
     let path = file.as_ref().map(|f| f.to_string_lossy().into_owned());
@@ -77,7 +79,7 @@ fn harness(open: bool, file: Option<PathBuf>) -> (Harness<'static, PdfCraftApp>,
         std::fs::write(f, &bytes).unwrap();
     }
     let (graph, ids) = map(&sha, path.as_deref());
-    let dir = temp(if open { "open" } else { "closed" });
+    let dir = temp(&format!("maps-{name}"));
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
@@ -112,35 +114,184 @@ fn flat(s: &str) -> String {
 }
 
 #[test]
-fn the_map_is_drawn_as_round_nodes_and_hovering_one_grows_its_preview() {
-    let (mut h, _) = harness(true, None);
+fn the_map_is_drawn_as_round_nodes_and_hovering_one_grows_a_render_of_its_passage() {
+    let (mut h, _) = harness("the_map_is_drawn_as_roun", true, None);
     let frame = h.get_by_label("Map graph").rect();
     for label in ["La banca centrale ha alzato il tasso", "L'inflazione è scesa", "Politica monetaria"] {
         let r = node(&h, label).rect();
         assert!((r.width() - r.height()).abs() < 1.0, "{label}: a circle's square, {r:?}");
         assert!(frame.contains_rect(r), "{label} inside the graph {frame:?}: {r:?}");
     }
-    assert!(h.query_by_label("“L'inflazione è scesa”").is_none(), "no preview before hovering");
+    let render = "Page 2 of tassi.pdf, rendered";
+    assert!(h.query_by_label(render).is_none(), "no preview before hovering");
     node(&h, "L'inflazione è scesa").hover();
-    for _ in 0..12 {
-        h.run_steps(1);
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-    h.get_by_label("“L'inflazione è scesa”");
+    // The page is rendered for the preview, though the document shows page 1.
+    let rendered = support::step_until(&mut h, |h| {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        h.state().views[0].has_passage_raster(1) && h.query_by_label(render).is_some()
+    });
+    assert!(rendered, "the passage's page is rendered into the preview");
+    assert_eq!(h.state().views[0].current, 0, "the document stays where it was");
     h.get_by_label("tassi.pdf, p. 2");
     h.get_by_label("Click to go to the passage");
     // Away from the node, it shrinks back and goes.
-    h.get_by_label("Politica monetaria").hover();
+    h.get_by_label("Map graph").hover();
     let gone = support::step_until(&mut h, |h| {
         std::thread::sleep(std::time::Duration::from_millis(10));
-        h.query_by_label("“L'inflazione è scesa”").is_none()
+        h.query_by_label(render).is_none()
     });
     assert!(gone, "the preview closes");
+    // A concept has no page: its text shows.
+    node(&h, "Politica monetaria").hover();
+    let shown = support::step_until(&mut h, |h| {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        h.query_by_label("Click to pick it, to connect it").is_some()
+    });
+    assert!(shown);
+}
+
+/// A mouse drag from `a` to `b`, with `modifiers` held.
+fn drag(h: &mut Harness<'static, PdfCraftApp>, a: egui::Pos2, b: egui::Pos2, modifiers: egui::Modifiers) {
+    use egui::{Event, PointerButton};
+    support::input::one_frame(h, [Event::ModifiersChanged(modifiers), Event::PointerMoved(a)]);
+    support::input::one_frame(h, [Event::PointerButton { pos: a, button: PointerButton::Primary, pressed: true, modifiers }]);
+    for i in 1..=8 {
+        support::input::one_frame(h, [Event::PointerMoved(a + (b - a) * (i as f32 / 8.0))]);
+    }
+    support::input::one_frame(h, [Event::PointerButton { pos: b, button: PointerButton::Primary, pressed: false, modifiers }]);
+    support::input::one_frame(h, [Event::ModifiersChanged(egui::Modifiers::NONE)]);
+    h.run_steps(2);
+}
+
+#[test]
+fn shift_dragging_a_node_onto_another_connects_them_and_dragging_moves_it() {
+    let (mut h, ids) = harness("shift_dragging_a_node_on", true, None);
+    let edges = h.state().maps.graph.edges().len();
+    let a = node(&h, "L'inflazione è scesa").rect().center();
+    let b = node(&h, "Non c'è").rect().center();
+    drag(&mut h, a, b, egui::Modifiers::SHIFT);
+    let g = h.state().maps.graph.clone();
+    assert_eq!(g.edges().len(), edges + 1, "connected");
+    let e = g.edges().last().unwrap();
+    assert_eq!((e.from, e.to), (ids[1], ids[3]));
+    assert_eq!(e.strength, h.state().maps.new_strength);
+    // A plain drag moves the node, saved and undoable; the rest of the graph stays put.
+    let before = g.node(ids[2]).unwrap().position;
+    let other = node(&h, "Politica monetaria").rect().center();
+    let c = node(&h, "Il calo ha sorpreso").rect().center();
+    drag(&mut h, c, c + egui::vec2(-30.0, -20.0), egui::Modifiers::NONE);
+    let after = h.state().maps.graph.node(ids[2]).unwrap().position;
+    assert!(after[0] < before[0] && after[1] < before[1], "{before:?} -> {after:?}");
+    assert_eq!(h.state().maps.graph.edges().len(), edges + 1, "a plain drag connects nothing");
+    let moved_other = node(&h, "Politica monetaria").rect().center();
+    assert!((moved_other - other).length() < 40.0, "the graph didn't jump");
+    assert!(h.state_mut().execute("edit.undo") || h.state().maps.graph.node(ids[2]).is_some());
+    // While a node is dragged, it moves as the pointer does, even when it was the one at the
+    // graph's edge: the graph keeps the fit it had until the drag ends.
+    use egui::{Event, PointerButton};
+    let a = node(&h, "Non c'è").rect().center();
+    let b = a + egui::vec2(80.0, -12.0);
+    let at = |i: u32| a + (b - a) * (i as f32 / 8.0);
+    support::input::one_frame(&mut h, [Event::PointerMoved(a)]);
+    support::input::one_frame(
+        &mut h,
+        [Event::PointerButton { pos: a, button: PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE }],
+    );
+    let mut seen = Vec::new();
+    for i in 1..=8 {
+        support::input::one_frame(&mut h, [Event::PointerMoved(at(i))]);
+        h.run_steps(1);
+        seen.push(node(&h, "Non c'è").rect().center());
+    }
+    let moved = seen[7] - seen[3];
+    let pointer = at(8) - at(4);
+    assert!((moved - pointer).length() < 1.0, "the node moved {moved:?} as the pointer moved {pointer:?}");
+    support::input::one_frame(
+        &mut h,
+        [Event::PointerButton { pos: b, button: PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE }],
+    );
+    h.run_steps(2);
+}
+
+#[test]
+fn the_keyboard_moves_between_nodes_and_connects_them() {
+    let (mut h, ids) = harness("the_keyboard_moves_betwe", true, None);
+    let edges = h.state().maps.graph.edges().len();
+    // ⌘⇧E gives the graph the keyboard.
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::E);
+    h.run_steps(3);
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    let first = h.state().maps.graph_cursor();
+    assert!(first.is_some(), "Tab lands on a node");
+    assert_eq!(h.state().views[0].current, 0, "the arrows and Tab stay with the graph, not the pages");
+    // From the snippet on page 2, connect to the concept, strong.
+    while h.state().maps.graph_cursor() != Some(ids[1]) {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(1);
+    }
+    h.key_press(egui::Key::C);
+    h.key_press(egui::Key::Num3);
+    h.run_steps(1);
+    while h.state().maps.graph_cursor() != Some(ids[3]) {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(1);
+    }
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    let g = h.state().maps.graph.clone();
+    assert_eq!(g.edges().len(), edges + 1);
+    let e = g.edges().last().unwrap();
+    assert_eq!((e.from, e.to, e.strength), (ids[1], ids[3], Strength::Strong));
+    // Enter on a node goes to its passage.
+    while h.state().maps.graph_cursor() != Some(ids[1]) {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(1);
+    }
+    h.key_press(egui::Key::Enter);
+    support::wait_until(&mut h, "the passage marked", |app| app.views[0].marked_text().is_some());
+    assert_eq!(h.state().views[0].current, 1);
+    // Escape lets the keyboard go back to the document.
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    h.key_press(egui::Key::Tab);
+    h.run_steps(2);
+    assert_eq!(h.state().maps.graph_cursor(), Some(ids[1]), "Tab no longer moves the graph's cursor");
+}
+
+#[test]
+fn the_map_opens_in_a_window_of_its_own_and_a_click_there_marks_the_passage_in_the_document() {
+    let (mut h, ids) = harness("the_map_opens_in_a_windo", true, None);
+    assert!(h.state_mut().execute("map.window"));
+    h.run_steps(4);
+    assert!(h.state().maps.window);
+    let frame = h.get_by_label("Map graph in its window").rect();
+    let in_window = h.get_by(|n| {
+        n.role() == Role::Button
+            && n.label().as_deref() == Some("L'inflazione è scesa")
+            && n.bounding_box().is_some_and(|b| frame.contains(egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32)))
+    });
+    in_window.click();
+    support::wait_until(&mut h, "the passage marked in the document", |app| app.views[0].marked_text().is_some());
+    assert_eq!(h.state().views[0].current, 1);
+    assert_eq!(h.state().maps.picked, Some(MapPicked::Node(ids[1])));
+    // The picked node's connections show beside the window's graph, as in the panel.
+    assert_eq!(h.get_all_by_label("Connect").count(), 2);
+    h.get_by_label("Close this window; the map stays beside the document").click();
+    h.run_steps(3);
+    assert!(!h.state().maps.window);
+    // The system's close button closes it too (here, where it is embedded, the main window's).
+    assert!(h.state_mut().execute("map.window"));
+    h.run_steps(3);
+    assert!(h.state().maps.window);
+    h.input_mut().viewports.entry(egui::ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close);
+    h.run_steps(2);
+    assert!(!h.state().maps.window, "closed by the system's close button");
 }
 
 #[test]
 fn clicking_a_node_goes_to_its_passage_and_marks_where_it_starts_and_ends() {
-    let (mut h, ids) = harness(true, None);
+    let (mut h, ids) = harness("clicking_a_node_goes_to_", true, None);
     assert_eq!(h.state().views[0].current, 0);
     node(&h, "L'inflazione è scesa").click();
     support::wait_until(&mut h, "the passage marked", |app| app.views[0].marked_text().is_some());
@@ -174,7 +325,7 @@ fn clicking_a_node_goes_to_its_passage_and_marks_where_it_starts_and_ends() {
 fn a_document_that_has_to_open_first_is_marked_once_it_has() {
     let dir = temp("file");
     let file = dir.join("tassi.pdf");
-    let (mut h, _) = harness(false, Some(file.clone()));
+    let (mut h, _) = harness("opens-first", false, Some(file.clone()));
     assert_eq!(h.state().views.len(), 1);
     node(&h, "L'inflazione è scesa").click();
     support::wait_until(&mut h, "the document opened and marked", |app| {
