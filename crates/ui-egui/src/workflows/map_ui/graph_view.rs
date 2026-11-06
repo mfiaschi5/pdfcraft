@@ -20,7 +20,7 @@ use pdfcraft_ai::text::{capped, prefix};
 use pdfcraft_graph::{Anchor, Author, Content, Graph, Line, NodeId, Strength};
 use pdfcraft_render::DocInfo;
 
-use super::{Action, Here, MapState, Picked, colour, source_label, strength_name};
+use super::{Action, Here, MapState, Picked, colour, strength_name};
 use crate::DocView;
 use crate::canvas::node_mark;
 use crate::theme::{self, Tokens};
@@ -34,10 +34,14 @@ const LABEL_ALL_UP_TO: usize = 24;
 const LABEL_CHARS: usize = 22;
 /// How long the preview takes to grow, in seconds.
 const GROW: f32 = 0.18;
-/// The preview's width once grown.
-const PREVIEW_WIDTH: f32 = 380.0;
+/// The preview's width once grown, where there is room for it.
+const PREVIEW_WIDTH: f32 = 600.0;
+/// The narrowest a grown preview is.
+const PREVIEW_MIN_WIDTH: f32 = 320.0;
 /// The tallest a preview's picture of the page is.
-const PREVIEW_IMAGE_HEIGHT: f32 = 260.0;
+const PREVIEW_IMAGE_HEIGHT: f32 = 440.0;
+/// The space between the graph and a preview beside it.
+const PREVIEW_GAP: f32 = 10.0;
 /// Room kept around a passage in its preview (view-space points).
 const CONTEXT: f32 = 24.0;
 /// The narrowest a preview's crop is, as a part of the page's width: wide enough to read a line
@@ -260,22 +264,41 @@ pub(crate) fn neighbour(nodes: &[(NodeId, Pos2, f32)], from: Pos2, dir: Vec2, ex
         .map(|(id, _)| id)
 }
 
-/// The part of a page a preview shows, in view space: the passage's lines with room around them,
-/// at least [`MIN_CROP`] of the page wide, no taller than `max_aspect` times its width (the passage's start
-/// kept in view), all inside the page.
-pub(crate) fn preview_crop(lines: &[Rect], page: Vec2, max_aspect: f32) -> Rect {
+/// The part of a page a preview shows, in view space: the passage with room around it, widened to
+/// the whole lines of its column (`page_lines`, the page's lines, those across the passage and
+/// just above and below it) so no line is cut, at least [`MIN_CROP`] of the page wide, no taller
+/// than `max_aspect` times its width (the passage's start kept in view, ending on a whole line),
+/// all inside the page.
+pub(crate) fn preview_crop(lines: &[Rect], page_lines: &[Rect], page: Vec2, max_aspect: f32) -> Rect {
     let page_rect = Rect::from_min_size(Pos2::ZERO, page.max(Vec2::splat(1.0)));
     let Some(first) = lines.first().copied() else { return page_rect };
     let passage = lines.iter().fold(first, |a, b| a.union(*b));
-    let width = (passage.width() + 2.0 * CONTEXT).max(page_rect.width() * MIN_CROP).min(page_rect.width());
-    let mut height = (passage.height() + 2.0 * CONTEXT).min(page_rect.height());
-    let mut top = passage.min.y - CONTEXT;
-    if height > width * max_aspect {
-        height = width * max_aspect;
-        // A long passage: its start, with a little above it.
-        top = passage.min.y - CONTEXT * 0.5;
+    // The lines of the passage's column (overlapping it across) within its band, kept whole.
+    let band = passage.expand2(vec2(0.0, CONTEXT));
+    let in_column = |l: &&Rect| l.is_finite() && l.max.x > passage.min.x && l.min.x < passage.max.x;
+    let column = page_lines
+        .iter()
+        .filter(in_column)
+        .filter(|l| l.max.y > band.min.y && l.min.y < band.max.y)
+        .fold(band, |a, l| a.union(*l))
+        // A little air, less than the gap between lines.
+        .expand2(vec2(0.0, 3.0));
+    let width = (column.width() + CONTEXT).max(page_rect.width() * MIN_CROP).min(page_rect.width());
+    let top = column.min.y;
+    let mut height = column.height().min(page_rect.height());
+    let most = width * max_aspect;
+    if height > most {
+        // A long passage: its start, ending after the last whole line that fits (one past the
+        // passage's first line), else where it has to.
+        let last = page_lines
+            .iter()
+            .filter(in_column)
+            .map(|l| l.max.y + 2.0)
+            .filter(|bottom| *bottom >= first.max.y && *bottom <= top + most)
+            .fold(None, |m: Option<f32>, b| Some(m.map_or(b, |m| m.max(b))));
+        height = last.map_or(most, |bottom| bottom - top);
     }
-    let left = (passage.center().x - width * 0.5).clamp(0.0, (page_rect.width() - width).max(0.0));
+    let left = (column.center().x - width * 0.5).clamp(0.0, (page_rect.width() - width).max(0.0));
     let top = top.clamp(0.0, (page_rect.height() - height).max(0.0));
     Rect::from_min_size(pos2(left, top), vec2(width, height))
 }
@@ -289,15 +312,6 @@ fn style(t: &Tokens, content: &Content, author: Author) -> (Color32, Stroke) {
         Content::Image { .. } => (t.accent.gamma_multiply(0.65), Stroke::new(1.2, t.accent)),
         Content::Concept { .. } => (t.accent_soft, Stroke::new(1.5, t.accent)),
         Content::Note { .. } => (t.card, Stroke::new(1.2, outline)),
-    }
-}
-
-fn kind_name(content: &Content) -> &'static str {
-    match content {
-        Content::Text { .. } => tl!("Snippet"),
-        Content::Image { .. } => tl!("Picture"),
-        Content::Concept { .. } => tl!("Concept"),
-        Content::Note { .. } => tl!("Note"),
     }
 }
 
@@ -329,15 +343,33 @@ impl MapState {
     }
 }
 
-/// The keyboard shortcuts, as the help says them.
-fn shortcuts_help(ctx: &egui::Context) -> String {
-    let focus = crate::commands::command_shortcut_label(ctx, "map.focus_graph");
-    crate::i18n::fmt(
-        tl!(
-            "Click a node: go to its passage\nDrag: move it · Shift-drag onto another: connect them\nArrows or Tab: move between nodes · Enter: go to the passage\nSpace: keep the preview open · C: connect from the node, then Enter on another\n1, 2, 3: weak, medium, strong · K: next kind of connection\n+ - 0: zoom · Escape: let go · {focus}: go to the graph"
-        ),
-        &[("focus", &focus)],
-    )
+/// The graph's keyboard and mouse shortcuts, in the popup of the toolbar's "?".
+fn shortcuts(ui: &mut egui::Ui) {
+    let key = crate::i18n::key_name;
+    let focus = crate::commands::command_shortcut_label(ui.ctx(), "map.focus_graph");
+    let rows = [
+        (tl!("Click").to_owned(), tl!("Go to the node's passage")),
+        (tl!("Drag").to_owned(), tl!("Move the node")),
+        (crate::i18n::fmt(tl!("{shift}-drag"), &[("shift", key("Shift"))]), tl!("Connect it to the node it is dropped on")),
+        (focus, tl!("Give the graph the keyboard")),
+        (format!("\u{2190} \u{2191} \u{2192} \u{2193}  {}", key("Tab")), tl!("Move between nodes")),
+        (key("Enter").to_owned(), tl!("Go to the passage")),
+        (crate::i18n::fmt(tl!("C, then {enter}"), &[("enter", key("Enter"))]), tl!("Connect the node to the one moved to")),
+        ("1  2  3".to_owned(), tl!("Weak, medium, strong connections")),
+        ("K".to_owned(), tl!("Next kind of connection")),
+        (key("Space").to_owned(), tl!("Keep the preview open")),
+        ("+  -  0".to_owned(), tl!("Zoom in, zoom out, fit")),
+        (key("Esc").to_owned(), tl!("Cancel, then let go of the graph")),
+    ];
+    ui.label(egui::RichText::new(tl!("Graph shortcuts")).font(theme::semibold(13.0)));
+    ui.add_space(4.0);
+    egui::Grid::new(ui.scope_id().with("map-graph-keys")).num_columns(2).spacing([16.0, 5.0]).show(ui, |ui| {
+        for (keys, what) in rows.iter().filter(|(keys, _)| !keys.is_empty()) {
+            ui.label(egui::RichText::new(keys).font(egui::FontId::monospace(12.5)));
+            ui.label(*what);
+            ui.end_row();
+        }
+    });
 }
 
 /// The graph's own toolbar: zoom, fit, the map in a window, and the shortcuts.
@@ -355,7 +387,8 @@ fn toolbar(ui: &mut egui::Ui, maps: &mut MapState, host: Host, actions: &mut Vec
             view.fit_again();
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            crate::icons::button(ui, "circle-help", 24.0, false, &shortcuts_help(ui.ctx()));
+            let help = crate::icons::button(ui, "circle-help", 24.0, false, tl!("Keyboard shortcuts"));
+            egui::Popup::menu(&help).align(egui::RectAlign::BOTTOM_END).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(shortcuts);
             let (icon, tip) = match host {
                 Host::Panel if maps.window => ("app-window", tl!("The map is open in its own window; bring it back")),
                 Host::Panel => ("app-window", tl!("Open the map in its own window, to put it on another screen")),
@@ -786,28 +819,32 @@ fn footer(ui: &mut egui::Ui, t: &Tokens, maps: &MapState) {
 }
 
 /// The node's preview, grown `grown` (0 to 1) out of its circle to beside the graph, so it covers
-/// the document rather than the graph: the passage rendered from the PDF when its document is the
-/// one being read, else its text; where it comes from, and what it is connected to.
+/// the document rather than the graph: its passage as the PDF draws it when its document is the one
+/// being read, else its text, large enough to read.
 fn preview(ui: &egui::Ui, t: &Tokens, graph: &Graph, (id, c, r): (NodeId, Pos2, f32), graph_rect: Rect, grown: f32, doc: Option<&mut Doc<'_>>) {
     let Some(node) = graph.node(id) else { return };
     let ease = 1.0 - (1.0 - grown).powi(3);
-    let width = egui::lerp((r * 2.0).max(24.0)..=PREVIEW_WIDTH, ease);
     let screen = ui.ctx().content_rect();
-    // Outside the graph on the side with room: left of a panel docked at the window's right.
-    let left = graph_rect.min.x - 10.0 - PREVIEW_WIDTH >= screen.min.x;
-    let right = graph_rect.max.x + 10.0 + PREVIEW_WIDTH <= screen.max.x;
-    let (target, pivot) = if left {
-        (pos2(graph_rect.min.x - 10.0, c.y - r), Align2::RIGHT_TOP)
-    } else if right {
-        (pos2(graph_rect.max.x + 10.0, c.y - r), Align2::LEFT_TOP)
+    // Outside the graph on the side with room (left of a panel docked at the window's right), as
+    // wide as fits there.
+    let room_left = graph_rect.min.x - PREVIEW_GAP - screen.min.x - 8.0;
+    let room_right = screen.max.x - 8.0 - graph_rect.max.x - PREVIEW_GAP;
+    let full = PREVIEW_WIDTH.min(room_left.max(room_right)).max(PREVIEW_MIN_WIDTH);
+    let width = egui::lerp((r * 2.0).max(24.0)..=full, ease);
+    let (target, pivot) = if room_left >= full {
+        (pos2(graph_rect.min.x - PREVIEW_GAP, c.y - r), Align2::RIGHT_TOP)
+    } else if room_right >= full {
+        (pos2(graph_rect.max.x + PREVIEW_GAP, c.y - r), Align2::LEFT_TOP)
     } else {
         // No room beside the graph (its own window filling the screen): over it, beside the node.
-        (pos2(c.x + r + 10.0, c.y - r), Align2::LEFT_TOP)
+        (pos2(c.x + r + PREVIEW_GAP, c.y - r), Align2::LEFT_TOP)
     };
     // It starts at the node and travels out as it grows.
     let start = pos2(if pivot == Align2::RIGHT_TOP { c.x + r } else { c.x - r }, c.y - r);
     let pos = start + (target - start) * ease;
     let page = node.anchor.as_ref().and_then(|a| doc.filter(|d| d.sha256 == a.sha256).map(|d| (a, d)));
+    // The frame's margin (`Margin::same(6)` below).
+    const MARGIN: f32 = 6.0;
     egui::Area::new(ui.scope_id().with(("map-graph-preview-area", id.0)))
         .order(egui::Order::Tooltip)
         .fixed_pos(pos)
@@ -816,49 +853,35 @@ fn preview(ui: &egui::Ui, t: &Tokens, graph: &Graph, (id, c, r): (NodeId, Pos2, 
         .constrain(true)
         .show(ui.ctx(), |ui| {
             ui.set_opacity(ease);
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.set_width(width - 16.0);
-                ui.set_max_height(egui::lerp((r * 2.0)..=520.0, ease));
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(kind_name(&node.content)).small().strong().color(t.accent_text));
-                    if node.author == Author::Assistant {
-                        ui.label(egui::RichText::new(tl!("from the assistant")).small().color(t.text_faint));
-                    }
-                    if let Some(a) = &node.anchor {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(egui::RichText::new(source_label(a)).small().color(t.text_muted));
+            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
+                ui.set_width(width - 2.0 * MARGIN);
+                ui.set_max_height(egui::lerp((r * 2.0)..=PREVIEW_IMAGE_HEIGHT + 2.0 * MARGIN, ease));
+                match page {
+                    Some((anchor, doc)) => rendered(ui, t, anchor, doc, width - 2.0 * MARGIN, full - 2.0 * MARGIN),
+                    None => {
+                        let text = prefix(node.content.text(), 700);
+                        let text = match node.content {
+                            Content::Text { .. } => format!("\u{201C}{text}\u{201D}"),
+                            Content::Image { .. } => crate::i18n::fmt(tl!("Picture: {alt}"), &[("alt", text)]),
+                            _ => text.to_owned(),
+                        };
+                        egui::Frame::new().inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
+                            ui.label(egui::RichText::new(text).size(16.0).color(t.text));
                         });
                     }
-                });
-                let text = prefix(node.content.text(), 700);
-                match page {
-                    Some((anchor, doc)) => rendered(ui, t, anchor, doc, width - 16.0),
-                    None => {
-                        match node.content {
-                            Content::Text { .. } => ui.label(egui::RichText::new(format!("“{text}”")).italics()),
-                            Content::Image { .. } => ui.label(crate::i18n::fmt(tl!("Picture: {alt}"), &[("alt", text)])),
-                            _ => ui.label(text),
-                        };
-                        if node.anchor.is_some() {
-                            ui.label(egui::RichText::new(tl!("Open its document to see the page here.")).small().color(t.text_faint));
-                        }
-                    }
                 }
-                connections(ui, graph, id);
-                let hint = if node.anchor.is_some() { tl!("Click to go to the passage") } else { tl!("Click to pick it, to connect it") };
-                ui.label(egui::RichText::new(hint).small().color(t.text_faint));
             });
         });
 }
 
-/// The node's passage as the PDF draws it: the page rendered and cropped around the passage,
-/// marked from where it starts to where it ends.
-fn rendered(ui: &mut egui::Ui, t: &Tokens, anchor: &Anchor, doc: &mut Doc<'_>, width: f32) {
+/// The node's passage as the PDF draws it: the page around the passage, rendered at the preview's
+/// size and marked from where the passage starts to where it ends. `width` is the preview's width
+/// now; `full`, its width grown, which the crop and its render are sized for.
+fn rendered(ui: &mut egui::Ui, t: &Tokens, anchor: &Anchor, doc: &mut Doc<'_>, width: f32, full: f32) {
     let Some(page) = usize::try_from(anchor.page).ok().filter(|p| *p < doc.info.pages.len()) else {
-        ui.label(egui::RichText::new(tl!("That page isn't in the document any more.")).small().color(t.text_faint));
+        ui.label(egui::RichText::new(tl!("That page isn't in the document any more.")).color(t.text_faint));
         return;
     };
-    doc.view.want_passage_preview(page);
     let Some(p) = doc.info.pages.get(page) else { return };
     let page_size = vec2(p.width, p.height);
     let text = doc.view.page_text(page);
@@ -869,49 +892,39 @@ fn rendered(ui: &mut egui::Ui, t: &Tokens, anchor: &Anchor, doc: &mut Doc<'_>, w
             .unwrap_or_default(),
         (None, None) => Vec::new(),
     };
-    let crop = preview_crop(&lines, page_size, PREVIEW_IMAGE_HEIGHT / width.max(1.0));
-    let scale = width / crop.width().max(1.0);
-    let size = vec2(width, (crop.height() * scale).min(PREVIEW_IMAGE_HEIGHT));
-    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+    let page_lines: Vec<Rect> = text
+        .as_ref()
+        .map(|t| node_mark::line_boxes(t, 0..t.glyphs.len()).into_iter().map(|b| Rect::from_min_max(pos2(b[0], b[1]), pos2(b[2], b[3]))).collect())
+        .unwrap_or_default();
+    let full = full.max(1.0);
+    let crop = preview_crop(&lines, &page_lines, page_size, PREVIEW_IMAGE_HEIGHT / full);
+    doc.view.want_passage_preview(page, crop, full * ui.ctx().pixels_per_point());
+    // As wide as the preview, and no taller than its picture may be: a whole page (its passage not
+    // found yet) is fitted, centred.
+    let max_height = PREVIEW_IMAGE_HEIGHT * width / full;
+    let scale = (width / crop.width().max(1.0)).min(max_height / crop.height().max(1.0));
+    let (row, response) = ui.allocate_exact_size(vec2(width, crop.height() * scale), Sense::hover());
+    let rect = Rect::from_center_size(row.center(), crop.size() * scale);
     let alt = crate::i18n::fmt(tl!("Page {n} of {doc}, rendered"), &[("n", &(page + 1).to_string()), ("doc", &anchor.title)]);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &alt));
     let painter = ui.painter_at(rect);
-    match doc.view.passage_raster(page) {
-        Some(tex) => {
+    match doc.view.passage_raster(page, crop, page_size) {
+        Some((tex, covers)) if covers.width() > 0.0 && covers.height() > 0.0 => {
             let uv = Rect::from_min_max(
-                pos2(crop.min.x / page_size.x, crop.min.y / page_size.y),
-                pos2(crop.max.x / page_size.x, crop.max.y / page_size.y),
+                pos2((crop.min.x - covers.min.x) / covers.width(), (crop.min.y - covers.min.y) / covers.height()),
+                pos2((crop.max.x - covers.min.x) / covers.width(), (crop.max.y - covers.min.y) / covers.height()),
             );
-            painter.rect_filled(rect, 3.0, Color32::WHITE);
+            painter.rect_filled(rect, 4.0, Color32::WHITE);
             painter.image(tex, rect, uv, Color32::WHITE);
             let to_screen = |b: &Rect| Rect::from_min_max(rect.min + (b.min - crop.min) * scale, rect.min + (b.max - crop.min) * scale);
             let boxes: Vec<Rect> = lines.iter().map(to_screen).collect();
-            node_mark::paint_passage(&painter, &boxes, 0.8);
-            if text.is_some() && lines.is_empty() {
-                ui.label(egui::RichText::new(tl!("The passage wasn't found on the page; the page is shown.")).small().color(t.text_faint));
-            }
+            node_mark::paint_passage(&painter, &boxes, 0.9);
         }
-        None => {
-            painter.rect_filled(rect, 3.0, t.card);
-            painter.text(rect.center(), Align2::CENTER_CENTER, tl!("Rendering the page…"), egui::FontId::proportional(12.0), t.text_faint);
+        _ => {
+            painter.rect_filled(rect, 4.0, t.card);
+            painter.text(rect.center(), Align2::CENTER_CENTER, tl!("Rendering the page…"), egui::FontId::proportional(13.0), t.text_faint);
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(60));
         }
-    }
-    ui.painter().rect_stroke(rect, 3.0, Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
-}
-
-/// Up to four of the node's connections.
-fn connections(ui: &mut egui::Ui, graph: &Graph, id: NodeId) {
-    for (shown, e) in graph.edges().iter().filter(|e| e.from == id || e.to == id).enumerate() {
-        if shown == 4 {
-            ui.label(egui::RichText::new("…").small());
-            break;
-        }
-        let other = if e.from == id { e.to } else { e.from };
-        let kind = graph.kind(e.kind).map_or("", |k| tl!(&k.name));
-        let arrow = if e.from == id { "→" } else { "←" };
-        let name = graph.node(other).map(|o| short_label(o.content.text(), 44)).unwrap_or_default();
-        ui.label(egui::RichText::new(format!("{arrow} {kind} ({}) · {name}", strength_name(e.strength))).small());
     }
 }
 

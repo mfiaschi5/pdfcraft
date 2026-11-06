@@ -575,7 +575,10 @@ impl DocView {
         }
         // The length was checked above, so the renderer's buffer becomes the texture data as is.
         let img = texture_image([r.width as usize, r.height as usize], r.rgba);
-        if let Some(t) = r.request.tile {
+        // A map preview's crop is a tile too, but not one of the page on screen.
+        if r.request.tag & super::passage_preview::PASSAGE_TAG != 0 {
+            self.receive_passage(ctx, &r.request, img);
+        } else if let Some(t) = r.request.tile {
             let key = (page, r.request.tag, t.x, t.y);
             let tex = ctx.load_texture(format!("tile-{:?}-{page}-{}-{}", self.id, t.x, t.y), img, TextureOptions::LINEAR);
             self.tiles.insert(key, tex);
@@ -587,8 +590,6 @@ impl DocView {
             if !self.page_out_of_date(page) {
                 self.text_background.page_received(page);
             }
-        } else if r.request.tag & super::passage_preview::PASSAGE_TAG != 0 {
-            self.receive_passage(ctx, page, r.request.tag, img);
         } else if r.request.tag & PRINT_TAG != 0 {
             let tex = ctx.load_texture(
                 format!("print-{:?}-{page}", self.id),
