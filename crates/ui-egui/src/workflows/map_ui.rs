@@ -31,6 +31,7 @@ use pdfcraft_graph::{Anchor, Author, Content, EdgeId, Graph, History, ImageBytes
 
 use crate::PdfCraftApp;
 
+mod board;
 mod graph_view;
 mod window;
 
@@ -108,6 +109,8 @@ pub struct MapState {
     /// A node's passage to mark once its document is open (it was opening when the node was
     /// clicked).
     pending_mark: Option<PendingMark>,
+    /// The whole map's board: its preview, glides and pictures.
+    pub(crate) board: board::Board,
 }
 
 struct PendingMark {
@@ -148,6 +151,7 @@ impl Default for MapState {
             window_view: graph_view::GraphView::default(),
             window: false,
             pending_mark: None,
+            board: board::Board::default(),
         }
     }
 }
@@ -194,6 +198,8 @@ impl MapState {
         self.review = None;
         self.connecting = None;
         self.moved = false;
+        // Another map: fitted to the board when it shows.
+        self.board.fit = true;
     }
 }
 
@@ -230,6 +236,7 @@ impl PdfCraftApp {
         }
         self.ensure_map();
         self.maps.open = true;
+        self.maps.board.fit = true;
     }
 
     /// Make sure changes have a map file to go to: the one shown, else the default map, else the
@@ -393,8 +400,8 @@ impl PdfCraftApp {
     pub(crate) fn add_image_to_map(&mut self, index: usize, page: usize, image: usize) {
         let Some(id) = self.views.get(index).map(|v| v.id) else { return };
         let Some(doc) = self.session.get(id) else { return };
-        let bytes = match doc.page_image_file(page, image) {
-            Ok((_, bytes)) => bytes,
+        let bytes = match doc.page_image_for_map(page, image, pdfcraft_graph::MAX_IMAGE_BYTES) {
+            Ok(bytes) => bytes,
             Err(e) => {
                 self.notify(e);
                 return;
@@ -723,61 +730,114 @@ pub(crate) enum Action {
 pub(crate) fn workspace(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let mut actions: Vec<Action> = Vec::new();
+    // The side panel shows when there is room for it beside the board, unless asked otherwise.
+    let side_open = app.maps.board.side.unwrap_or(ui.available_width() >= 900.0);
     egui::Panel::top("map-toolbar")
-        .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(10, 6)))
-        .show(ui, |ui| toolbar(ui, &t, app, &mut actions));
-    egui::Panel::right("map-side")
-        .resizable(false)
-        .exact_size(290.0)
-        .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(10, 6)))
-        .show(ui, |ui| egui::ScrollArea::vertical().show(ui, |ui| side(ui, &t, app, &mut actions)));
-    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| canvas(ui, &t, &mut app.maps, &mut actions));
+        .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(10, 6)).stroke(egui::Stroke::new(1.0, t.divider)))
+        .show(ui, |ui| toolbar(ui, &t, app, side_open, &mut actions));
+    if side_open {
+        egui::Panel::right("map-side")
+            .resizable(false)
+            .exact_size(300.0)
+            .frame(egui::Frame::NONE.fill(t.pasteboard).inner_margin(egui::Margin::symmetric(10, 10)))
+            .show(ui, |ui| egui::ScrollArea::vertical().show(ui, |ui| side(ui, &t, app, &mut actions)));
+    }
+    // Previews render from the document being read.
+    let active = app.active.and_then(|i| app.views.get(i).map(|v| (i, v.id)));
+    let sha256 = active.and_then(|(_, id)| app.session.document_sha256(id)).map(|h| h.to_hex());
+    let info = active.and_then(|(_, id)| app.session.get(id)).map(|d| &d.info);
+    let view = active.and_then(|(i, _)| app.views.get_mut(i));
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
+        let mut doc = match (sha256, info, view) {
+            (Some(sha256), Some(info), Some(view)) => Some(GraphDoc { sha256, info, view }),
+            _ => None,
+        };
+        board::canvas(ui, &t, &mut app.maps, doc.as_mut(), &mut actions);
+        // The document isn't drawn, so its previews' renders are asked for here.
+        if let Some(d) = doc {
+            d.view.queue_passage_requests(d.info);
+        }
+    });
     for action in actions {
         run(app, action);
     }
 }
 
-fn toolbar(ui: &mut egui::Ui, t: &Tokens, app: &mut PdfCraftApp, actions: &mut Vec<Action>) {
+fn toolbar(ui: &mut egui::Ui, t: &Tokens, app: &mut PdfCraftApp, side_open: bool, actions: &mut Vec<Action>) {
     ui.horizontal_wrapped(|ui| {
-        if ui.button(tl!("Back to the document")).clicked() {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        if ui.add(egui::Button::image_and_text(crate::icons::image("chevron-left", 14.0, t.icon), tl!("Back to the document"))).clicked() {
             actions.push(Action::Close);
         }
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            ui.add(crate::icons::image("share-2", 15.0, t.accent));
+            let current = app.maps.graph.title.clone();
+            craft_ui::ComboBox::from_id_salt("map-file")
+                .selected_text(egui::RichText::new(current).font(theme::semibold(13.0)))
+                .width(170.0)
+                .show_ui(ui, |ui| {
+                    for path in app.maps.files() {
+                        let name = path.file_name().map(|n| n.to_string_lossy().trim_end_matches(EXTENSION).to_owned()).unwrap_or_default();
+                        if ui.selectable_label(app.maps.file.as_ref() == Some(&path), name).clicked() {
+                            actions.push(Action::Load(path.clone()));
+                        }
+                    }
+                });
+            if crate::icons::button(ui, "file-plus", 26.0, false, tl!("New map")).clicked() {
+                actions.push(Action::New);
+            }
+        });
         ui.separator();
-        let current = app.maps.graph.title.clone();
-        craft_ui::ComboBox::from_id_salt("map-file").selected_text(current).width(180.0).show_ui(ui, |ui| {
-            for path in app.maps.files() {
-                let name = path.file_name().map(|n| n.to_string_lossy().trim_end_matches(EXTENSION).to_owned()).unwrap_or_default();
-                if ui.selectable_label(app.maps.file.as_ref() == Some(&path), name).clicked() {
-                    actions.push(Action::Load(path.clone()));
+        ui.horizontal(|ui| {
+            let undo = app.maps.history.undo_label().is_some();
+            if ui.add_enabled_ui(undo, |ui| crate::icons::button(ui, "undo-2", 26.0, false, tl!("Undo"))).inner.clicked() {
+                actions.push(Action::Undo);
+            }
+            let redo = app.maps.history.redo_label().is_some();
+            if ui.add_enabled_ui(redo, |ui| crate::icons::button(ui, "redo-2", 26.0, false, tl!("Redo"))).inner.clicked() {
+                actions.push(Action::Redo);
+            }
+            let tidy = app.maps.graph.nodes().len() > 1;
+            if ui.add_enabled(tidy, egui::Button::image_and_text(crate::icons::image("wand-sparkles", 14.0, t.icon), tl!("Tidy up"))).clicked() {
+                actions.push(Action::Tidy);
+            }
+        });
+        ui.separator();
+        ui.horizontal(|ui| {
+            if crate::icons::button(ui, "zoom-out", 26.0, false, tl!("Zoom out")).clicked() {
+                app.maps.board.zoom_by = Some(1.0 / 1.25);
+            }
+            if crate::icons::button(ui, "zoom-in", 26.0, false, tl!("Zoom in")).clicked() {
+                app.maps.board.zoom_by = Some(1.25);
+            }
+            if crate::icons::button(ui, "maximize", 26.0, false, tl!("Fit the map")).clicked() {
+                app.maps.board.fit = true;
+            }
+        });
+        ui.separator();
+        // The kind and strength of new connections, together so they wrap as one.
+        if ui.available_size_before_wrap().x < 360.0 {
+            ui.end_row();
+        }
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(tl!("New connections:")).color(t.text_muted));
+            let kind = app.maps.graph.kind(app.maps.new_kind);
+            let kind_name = kind.map(|k| k.name.clone()).unwrap_or_default();
+            if let Some(k) = kind {
+                let (dot, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+                ui.painter().circle_filled(dot.center(), 4.5, colour(k.colour));
+            }
+            craft_ui::ComboBox::from_id_salt("map-kind").selected_text(tl!(&kind_name)).width(140.0).show_ui(ui, |ui| {
+                for k in app.maps.graph.kinds() {
+                    ui.selectable_value(&mut app.maps.new_kind, k.id, tl!(&k.name));
                 }
-            }
-        });
-        if ui.button(tl!("New map")).clicked() {
-            actions.push(Action::New);
-        }
-        ui.separator();
-        let undo = app.maps.history.undo_label().map(|l| crate::i18n::fmt(tl!("Undo {what}"), &[("what", tl!(l))]));
-        if ui.add_enabled(undo.is_some(), egui::Button::new(tl!("Undo"))).on_hover_text(undo.unwrap_or_default()).clicked() {
-            actions.push(Action::Undo);
-        }
-        if ui.add_enabled(app.maps.history.redo_label().is_some(), egui::Button::new(tl!("Redo"))).clicked() {
-            actions.push(Action::Redo);
-        }
-        if ui.add_enabled(app.maps.graph.nodes().len() > 1, egui::Button::new(tl!("Tidy up"))).clicked() {
-            actions.push(Action::Tidy);
-        }
-        ui.separator();
-        ui.label(egui::RichText::new(tl!("New connections:")).color(t.text_muted));
-        let kind_name = app.maps.graph.kind(app.maps.new_kind).map(|k| k.name.clone()).unwrap_or_default();
-        craft_ui::ComboBox::from_id_salt("map-kind").selected_text(tl!(&kind_name)).width(150.0).show_ui(ui, |ui| {
-            for k in app.maps.graph.kinds() {
-                ui.selectable_value(&mut app.maps.new_kind, k.id, tl!(&k.name));
-            }
-        });
-        craft_ui::ComboBox::from_id_salt("map-strength").selected_text(strength_name(app.maps.new_strength)).width(90.0).show_ui(ui, |ui| {
-            for s in STRENGTHS {
-                ui.selectable_value(&mut app.maps.new_strength, s, strength_name(s));
-            }
+            });
+            craft_ui::ComboBox::from_id_salt("map-strength").selected_text(strength_name(app.maps.new_strength)).width(90.0).show_ui(ui, |ui| {
+                for s in STRENGTHS {
+                    ui.selectable_value(&mut app.maps.new_strength, s, strength_name(s));
+                }
+            });
         });
         ui.separator();
         ui.menu_button(tl!("Export"), |ui| {
@@ -790,6 +850,10 @@ fn toolbar(ui: &mut egui::Ui, t: &Tokens, app: &mut PdfCraftApp, actions: &mut V
                 ui.close();
             }
         });
+        let tip = if side_open { tl!("Hide the side panel") } else { tl!("Show the side panel") };
+        if crate::icons::button(ui, "panel-right", 26.0, side_open, tip).clicked() {
+            app.maps.board.side = Some(!side_open);
+        }
     });
 }
 
@@ -802,72 +866,105 @@ fn hint(ui: &mut egui::Ui, t: &Tokens, text: &str) {
     ui.label(egui::RichText::new(text).small().color(t.text_faint));
 }
 
+/// One of the side panel's sections: a card with an icon and a title in `tint`.
+fn section(ui: &mut egui::Ui, t: &Tokens, icon: &str, tint: egui::Color32, title: &str, add: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
+        .fill(t.card)
+        .stroke(egui::Stroke::new(1.0, t.border))
+        .corner_radius(egui::CornerRadius::same(10))
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            // Fields stand out from the card they are on, in either theme.
+            ui.visuals_mut().text_edit_bg_color = Some(t.pasteboard);
+            ui.horizontal(|ui| {
+                ui.add(crate::icons::image(icon, 15.0, tint));
+                ui.label(egui::RichText::new(title).font(theme::semibold(13.5)).color(t.text));
+            });
+            ui.add_space(6.0);
+            add(ui);
+        });
+    ui.add_space(10.0);
+}
+
 fn side(ui: &mut egui::Ui, t: &Tokens, app: &mut PdfCraftApp, actions: &mut Vec<Action>) {
     // The assistant's proposal comes first while it waits: it is what the user decides on now.
     if let Some(review) = &mut app.maps.review {
-        heading(ui, tl!("The assistant's proposal"));
-        review_ui(ui, t, &app.maps.graph, review, actions);
-        ui.separator();
+        let graph = &app.maps.graph;
+        section(ui, t, "sparkles", t.accent, tl!("The assistant's proposal"), |ui| review_ui(ui, t, graph, review, actions));
     }
-    heading(ui, tl!("Add"));
-    ui.add(
-        crate::widgets::block(&mut app.maps.note_draft)
-            .hint_text(tl!("A note or a concept"))
-            .desired_rows(2)
-            .desired_width(f32::INFINITY)
-            .char_limit(4096),
-    );
-    ui.horizontal(|ui| {
-        let some = !app.maps.note_draft.trim().is_empty();
-        if ui.add_enabled(some, egui::Button::new(tl!("Add note"))).clicked() {
-            actions.push(Action::AddNote);
-        }
-        if ui.add_enabled(some, egui::Button::new(tl!("Add concept"))).clicked() {
-            actions.push(Action::AddConcept);
-        }
-    });
-    hint(ui, t, tl!("For a snippet, select text in a document and choose Add to map, or right-click a picture."));
-    ui.separator();
+    // What is picked, next: it is what the user is looking at.
     match app.maps.picked {
-        Some(Picked::Node(id)) => node_ui(ui, t, &app.maps.graph, id, actions),
-        Some(Picked::Edge(id)) => edge_ui(ui, &app.maps.graph, id, actions),
-        None => hint(ui, t, tl!("Click a node or a connection to see it here. Drag from a node's dot onto another node to connect them.")),
+        Some(Picked::Node(id)) => {
+            let kind = app.maps.graph.node(id).map(|n| board::Kind::of(&n.content));
+            let (icon, tint, title) = kind.map_or(("circle", t.accent, tl!("Node")), |k| (k.icon(), board::look(t, k).tint, k.name()));
+            let graph = &app.maps.graph;
+            section(ui, t, icon, tint, title, |ui| node_ui(ui, t, graph, id, actions));
+        }
+        Some(Picked::Edge(id)) => {
+            let graph = &app.maps.graph;
+            section(ui, t, "spline", t.accent, tl!("Connection"), |ui| edge_ui(ui, graph, id, actions));
+        }
+        None => {}
+    }
+    section(ui, t, "plus", t.accent, tl!("Add"), |ui| {
+        ui.add(
+            crate::widgets::block(&mut app.maps.note_draft)
+                .hint_text(tl!("A note or a concept"))
+                .desired_rows(2)
+                .desired_width(f32::INFINITY)
+                .char_limit(4096),
+        );
+        ui.horizontal(|ui| {
+            let some = !app.maps.note_draft.trim().is_empty();
+            let note = board::look(t, board::Kind::Note).tint;
+            if ui.add_enabled(some, egui::Button::image_and_text(crate::icons::image("sticky-note", 14.0, note), tl!("Add note"))).clicked() {
+                actions.push(Action::AddNote);
+            }
+            if ui.add_enabled(some, egui::Button::image_and_text(crate::icons::image("circle-dot", 14.0, t.accent), tl!("Add concept"))).clicked() {
+                actions.push(Action::AddConcept);
+            }
+        });
+        hint(ui, t, tl!("For a snippet, select text in a document and choose Add to map, or right-click a picture."));
+    });
+    if app.maps.picked.is_none() {
+        hint(ui, t, tl!("Click a node or a connection to see it here. Drag from a node's dot onto another node to connect them."));
+        ui.add_space(10.0);
     }
     if app.ai_service.is_some() && app.maps.review.is_none() {
-        ui.separator();
-        heading(ui, tl!("Ask the assistant"));
-        ask_ui(ui, t, app, actions);
+        let mut inner = Vec::new();
+        section(ui, t, "sparkles", t.accent, tl!("Ask the assistant"), |ui| ask_ui(ui, t, app, &mut inner));
+        actions.append(&mut inner);
     }
-    ui.separator();
-    heading(ui, tl!("Show connections"));
-    ui.horizontal_wrapped(|ui| {
-        for s in STRENGTHS {
-            let label = crate::i18n::fmt(tl!("{s} and up"), &[("s", strength_name(s))]);
-            ui.selectable_value(&mut app.maps.min_strength, s, label);
-        }
-    });
-    egui::CollapsingHeader::new(tl!("Kinds of connection")).id_salt("map-kinds").show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.add(crate::widgets::line(&mut app.maps.kind_draft).hint_text(tl!("A kind of your own")).desired_width(140.0).char_limit(64));
-            ui.add(crate::widgets::checkbox(&mut app.maps.kind_directed, tl!("Has a direction")));
+    section(ui, t, "filter", t.text_muted, tl!("Show connections"), |ui| {
+        ui.horizontal_wrapped(|ui| {
+            for s in STRENGTHS {
+                let label = crate::i18n::fmt(tl!("{s} and up"), &[("s", strength_name(s))]);
+                ui.selectable_value(&mut app.maps.min_strength, s, label);
+            }
         });
-        if ui.add_enabled(!app.maps.kind_draft.trim().is_empty(), egui::Button::new(tl!("Add kind"))).clicked() {
-            actions.push(Action::AddKind);
-        }
-        for k in app.maps.graph.kinds() {
+        egui::CollapsingHeader::new(tl!("Kinds of connection")).id_salt("map-kinds").show(ui, |ui| {
             ui.horizontal(|ui| {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(22.0, 10.0), egui::Sense::hover());
-                ui.painter().line_segment([rect.left_center(), rect.right_center()], egui::Stroke::new(2.0, colour(k.colour)));
-                ui.label(egui::RichText::new(tl!(&k.name)).small());
+                ui.add(crate::widgets::line(&mut app.maps.kind_draft).hint_text(tl!("A kind of your own")).desired_width(140.0).char_limit(64));
+                ui.add(crate::widgets::checkbox(&mut app.maps.kind_directed, tl!("Has a direction")));
             });
-        }
+            if ui.add_enabled(!app.maps.kind_draft.trim().is_empty(), egui::Button::new(tl!("Add kind"))).clicked() {
+                actions.push(Action::AddKind);
+            }
+            for k in app.maps.graph.kinds() {
+                ui.horizontal(|ui| {
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(22.0, 10.0), egui::Sense::hover());
+                    ui.painter().line_segment([rect.left_center(), rect.right_center()], egui::Stroke::new(2.5, colour(k.colour)));
+                    ui.label(egui::RichText::new(tl!(&k.name)).small());
+                });
+            }
+        });
     });
 }
 
 fn node_ui(ui: &mut egui::Ui, t: &Tokens, graph: &Graph, id: NodeId, actions: &mut Vec<Action>) {
     let Some(n) = graph.node(id) else { return };
-    heading(ui, tl!("Node"));
-    ui.label(prefix(n.content.text(), 2_000));
+    ui.label(egui::RichText::new(prefix(n.content.text(), 2_000)).size(13.5));
     if n.author == Author::Assistant {
         hint(ui, t, tl!("Added by the assistant"));
     }
@@ -886,7 +983,6 @@ fn node_ui(ui: &mut egui::Ui, t: &Tokens, graph: &Graph, id: NodeId, actions: &m
 
 fn edge_ui(ui: &mut egui::Ui, graph: &Graph, id: EdgeId, actions: &mut Vec<Action>) {
     let Some(e) = graph.edge(id) else { return };
-    heading(ui, tl!("Connection"));
     let (mut kind, mut strength) = (e.kind, e.strength);
     let kind_name = graph.kind(kind).map(|k| k.name.clone()).unwrap_or_default();
     craft_ui::ComboBox::from_id_salt("map-edge-kind").selected_text(tl!(&kind_name)).width(200.0).show_ui(ui, |ui| {
@@ -993,209 +1089,6 @@ fn review_ui(ui: &mut egui::Ui, t: &Tokens, graph: &Graph, review: &mut Review, 
             actions.push(Action::DiscardReview);
         }
     });
-}
-
-/// Where the map's world coordinates land on the screen.
-#[derive(Clone, Copy)]
-struct View {
-    origin: egui::Pos2,
-    zoom: f32,
-}
-
-impl View {
-    fn to_screen(self, p: [f32; 2]) -> egui::Pos2 {
-        egui::pos2(p[0] * self.zoom + self.origin.x, p[1] * self.zoom + self.origin.y)
-    }
-}
-
-/// A node's box on the screen and its laid-out text.
-type NodeBox = (NodeId, egui::Rect, Arc<egui::Galley>);
-
-fn canvas(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, actions: &mut Vec<Action>) {
-    let (rect, background) = ui.allocate_exact_size(ui.available_size(), egui::Sense::click_and_drag());
-    let painter = ui.painter_at(rect);
-    pan_and_zoom(ui, rect, &background, maps);
-    let view = View { origin: rect.center() + maps.pan, zoom: maps.zoom };
-    let font = egui::FontId::proportional(12.5 * view.zoom.clamp(0.6, 1.6));
-    let near: Option<HashSet<NodeId>> = match maps.picked {
-        Some(Picked::Node(id)) => Some(maps.graph.neighbourhood(id, 2)),
-        _ => None,
-    };
-    // Each node's box, laid out first: the connections meet them.
-    let mut boxes: Vec<NodeBox> = Vec::with_capacity(maps.graph.nodes().len());
-    for n in maps.graph.nodes() {
-        let text = match &n.content {
-            Content::Image { alt, .. } => crate::i18n::fmt(tl!("Picture: {alt}"), &[("alt", alt)]),
-            Content::Concept { label } => label.clone(),
-            other => capped(other.text(), 280),
-        };
-        let galley = painter.layout(text, font.clone(), t.text, ((NODE_WIDTH - 20.0) * view.zoom).max(10.0));
-        let source_h = if n.anchor.is_some() { 16.0 * view.zoom } else { 0.0 };
-        let size = egui::vec2(NODE_WIDTH * view.zoom, galley.size().y + 16.0 * view.zoom + source_h);
-        boxes.push((n.id, egui::Rect::from_center_size(view.to_screen(n.position), size), galley));
-    }
-    edges(ui, &painter, t, maps, near.as_ref(), &boxes, view.zoom);
-    nodes(ui, &painter, t, maps, near.as_ref(), &boxes, view.zoom, actions);
-    if maps.graph.nodes().is_empty() {
-        painter.text(
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            tl!("This map is empty. Add a note, or select text in a document and choose Add to map."),
-            egui::FontId::proportional(14.0),
-            t.text_faint,
-        );
-    }
-}
-
-/// Drag the background to pan; scroll to zoom about the pointer.
-fn pan_and_zoom(ui: &egui::Ui, rect: egui::Rect, background: &egui::Response, maps: &mut MapState) {
-    if background.dragged() && maps.connecting.is_none() {
-        maps.pan += background.drag_delta();
-    }
-    if background.clicked() {
-        maps.picked = None;
-    }
-    if !ui.rect_contains_pointer(rect) {
-        return;
-    }
-    let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-    if scroll != 0.0 && scroll.is_finite() {
-        let before = maps.zoom;
-        maps.zoom = (maps.zoom * (1.0 + scroll * 0.002)).clamp(0.2, 3.0);
-        // Keep the point under the pointer where it is.
-        if let Some(p) = ui.input(|i| i.pointer.hover_pos()) {
-            let origin = rect.center() + maps.pan;
-            maps.pan += (p - origin) * (1.0 - maps.zoom / before);
-        }
-    }
-}
-
-/// The connections, drawn by kind and strength; a click near one's middle picks it.
-fn edges(ui: &egui::Ui, painter: &egui::Painter, t: &Tokens, maps: &mut MapState, near: Option<&HashSet<NodeId>>, boxes: &[NodeBox], zoom: f32) {
-    let rects: std::collections::HashMap<NodeId, egui::Rect> = boxes.iter().map(|(id, r, _)| (*id, *r)).collect();
-    let mut picked = None;
-    for e in maps.graph.edges() {
-        if e.strength < maps.min_strength {
-            continue;
-        }
-        let (Some(a), Some(b)) = (rects.get(&e.from), rects.get(&e.to)) else { continue };
-        let kind = maps.graph.kind(e.kind);
-        let mut c = kind.map_or(t.text_faint, |k| colour(k.colour));
-        if near.is_some_and(|s| !(s.contains(&e.from) && s.contains(&e.to))) {
-            c = c.gamma_multiply(0.25);
-        }
-        if maps.picked == Some(Picked::Edge(e.id)) {
-            c = t.accent;
-        }
-        let width = match e.strength {
-            Strength::Weak => 1.0,
-            Strength::Medium => 2.0,
-            Strength::Strong => 3.5,
-        } * zoom.clamp(0.6, 1.5);
-        let stroke = egui::Stroke::new(width, c);
-        let (from, to) = (a.center(), b.center());
-        match kind.map_or(Line::Solid, |k| k.line) {
-            Line::Solid => {
-                painter.line_segment([from, to], stroke);
-            }
-            Line::Dashed => painter.extend(egui::Shape::dashed_line(&[from, to], stroke, 8.0, 5.0)),
-            Line::Dotted => painter.extend(egui::Shape::dotted_line(&[from, to], c, 6.0, width.max(1.0))),
-        }
-        let along = to - from;
-        if kind.is_some_and(|k| k.directed) && along.length() > 1.0 {
-            // The arrow head where the line meets the target's box.
-            let dir = along.normalized();
-            let tip = to - dir * (b.width().min(b.height()) * 0.5).min(along.length() * 0.5);
-            painter.arrow(tip - dir * 14.0 * zoom, dir * 14.0 * zoom, stroke);
-        }
-        let hit = egui::Rect::from_center_size(from + along * 0.5, egui::vec2(18.0, 18.0));
-        let name = format!("{} ({})", kind.map_or("", |k| tl!(&k.name)), strength_name(e.strength));
-        let response = ui.interact(hit, ui.scope_id().with(("map-edge", e.id.0)), egui::Sense::click()).on_hover_text(&name);
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
-        if response.clicked() {
-            picked = Some(Picked::Edge(e.id));
-        }
-    }
-    if picked.is_some() {
-        maps.picked = picked;
-    }
-}
-
-/// The nodes: click to pick, double-click to open the source, drag to move, and drag from the dot
-/// on the right edge onto another node to connect them.
-#[expect(clippy::too_many_arguments, reason = "the canvas's shared drawing state, passed down once")]
-fn nodes(
-    ui: &egui::Ui,
-    painter: &egui::Painter,
-    t: &Tokens,
-    maps: &mut MapState,
-    near: Option<&HashSet<NodeId>>,
-    boxes: &[NodeBox],
-    zoom: f32,
-    actions: &mut Vec<Action>,
-) {
-    let pointer = ui.input(|i| i.pointer.latest_pos());
-    for (id, r, galley) in boxes {
-        let Some(n) = maps.graph.node(*id) else { continue };
-        let faded = near.is_some_and(|s| !s.contains(id));
-        let fill = if faded { t.card.gamma_multiply(0.6) } else { t.card };
-        let border = if maps.picked == Some(Picked::Node(*id)) {
-            egui::Stroke::new(2.0, t.accent)
-        } else if n.author == Author::Assistant {
-            egui::Stroke::new(1.0, t.accent.gamma_multiply(0.6))
-        } else {
-            egui::Stroke::new(1.0, t.border)
-        };
-        painter.rect(*r, 6.0, fill, border, egui::StrokeKind::Inside);
-        painter.galley(r.min + egui::vec2(10.0, 8.0) * zoom, galley.clone(), if faded { t.text_faint } else { t.text });
-        if let Some(a) = &n.anchor {
-            let at = egui::pos2(r.min.x + 10.0 * zoom, r.max.y - 6.0 * zoom);
-            painter.text(at, egui::Align2::LEFT_BOTTOM, source_label(a), egui::FontId::proportional(10.5 * zoom.clamp(0.6, 1.6)), t.text_faint);
-        }
-        let response =
-            ui.interact(*r, ui.scope_id().with(("map-node", id.0)), egui::Sense::click_and_drag()).on_hover_text(prefix(n.content.text(), 600));
-        // Screen readers (and tests) find a node by its text.
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, galley.text()));
-        if response.clicked() {
-            maps.picked = Some(Picked::Node(*id));
-        }
-        if response.double_clicked()
-            && let Some(a) = &n.anchor
-        {
-            actions.push(Action::OpenSource(a.clone()));
-        }
-        if maps.connecting.is_none() {
-            if response.drag_started() {
-                actions.push(Action::DragStart);
-            }
-            if response.dragged() {
-                let d = response.drag_delta() / zoom;
-                actions.push(Action::Drag(*id, [n.position[0] + d.x, n.position[1] + d.y]));
-            }
-            if response.drag_stopped() {
-                actions.push(Action::DragEnd);
-            }
-        }
-        let handle = egui::Rect::from_center_size(egui::pos2(r.max.x, r.center().y), egui::vec2(14.0, 14.0));
-        painter.circle_filled(handle.center(), 5.0, t.accent);
-        let h = ui
-            .interact(handle, ui.scope_id().with(("map-handle", id.0)), egui::Sense::drag())
-            .on_hover_text(tl!("Drag onto another node to connect them"));
-        if h.drag_started() {
-            maps.connecting = Some(*id);
-        }
-        if h.dragged()
-            && let Some(p) = pointer
-        {
-            painter.line_segment([handle.center(), p], egui::Stroke::new(1.5, t.accent));
-        }
-        if h.drag_stopped() {
-            if let Some(to) = pointer.and_then(|p| boxes.iter().find(|(other, rr, _)| other != id && rr.contains(p)).map(|(o, ..)| *o)) {
-                actions.push(Action::Connect(*id, to));
-            }
-            maps.connecting = None;
-        }
-    }
 }
 
 fn run(app: &mut PdfCraftApp, action: Action) {
