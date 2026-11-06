@@ -877,7 +877,7 @@ fn preview(ui: &egui::Ui, t: &Tokens, graph: &Graph, (id, c, r): (NodeId, Pos2, 
 /// The node's passage as the PDF draws it: the page around the passage, rendered at the preview's
 /// size and marked from where the passage starts to where it ends. `width` is the preview's width
 /// now; `full`, its width grown, which the crop and its render are sized for.
-fn rendered(ui: &mut egui::Ui, t: &Tokens, anchor: &Anchor, doc: &mut Doc<'_>, width: f32, full: f32) {
+pub(super) fn rendered(ui: &mut egui::Ui, t: &Tokens, anchor: &Anchor, doc: &mut Doc<'_>, width: f32, full: f32) {
     let Some(page) = usize::try_from(anchor.page).ok().filter(|p| *p < doc.info.pages.len()) else {
         ui.label(egui::RichText::new(tl!("That page isn't in the document any more.")).color(t.text_faint));
         return;

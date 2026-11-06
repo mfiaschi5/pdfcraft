@@ -74,6 +74,13 @@ impl DocView {
         out
     }
 
+    /// The document isn't drawn (the whole map shows instead of it): ask for what a preview
+    /// wants on its own, with the frame's other work.
+    pub(crate) fn queue_passage_requests(&mut self, info: &DocInfo) {
+        let requests = self.passage_requests(info);
+        self.frame_queue.extend(requests);
+    }
+
     /// A preview's crop arrived.
     pub(super) fn receive_passage(&mut self, ctx: &egui::Context, req: &RenderRequest, img: ColorImage) {
         let Some(tile) = req.tile else { return };

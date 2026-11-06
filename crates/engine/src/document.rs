@@ -250,7 +250,7 @@ impl Document {
         let editor = self.editor.as_ref().ok_or("the document can't be read")?;
         let img = self.page_images(page).into_iter().nth(index).ok_or_else(|| format!("page {} has no image {}", page + 1, index + 1))?;
         if img.is_form {
-            return Err("grouped Form artwork is not a bitmap; Save Image As is only available for raster images".into());
+            return self.artwork_file(page, &img);
         }
         pdfcraft_create::image_file(&editor.cos, img.object.ok_or("the image has no object")?)
     }

@@ -396,3 +396,128 @@ fn a_document_that_has_to_open_first_is_marked_once_it_has() {
     assert_eq!(s.views[i].current, 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A tiny PNG picture for the map: a red square with a blue corner.
+fn picture() -> Vec<u8> {
+    let px =
+        image::RgbaImage::from_fn(48, 32, |x, y| if x < 16 && y < 12 { image::Rgba([30, 60, 200, 255]) } else { image::Rgba([210, 60, 40, 255]) });
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(px).write_to(&mut png, image::ImageFormat::Png).unwrap();
+    png.into_inner()
+}
+
+/// The whole map in the document area (View ▸ Concept map), with a note and a picture besides
+/// the snippets and the concept.
+fn whole_map(name: &str) -> (Harness<'static, PdfCraftApp>, Vec<NodeId>) {
+    let (mut h, mut ids) = harness(name, true, None);
+    let g = &mut h.state_mut().maps.graph;
+    let kinds: Vec<_> = g.kinds().iter().map(|k| k.id).collect();
+    let note = g
+        .add_node(Content::Note { text: "Ricontrollare i dati di ottobre prima della relazione.".into() }, None, [-260.0, -60.0], Author::User)
+        .unwrap();
+    let pic = g
+        .add_node(
+            Content::Image { image: pdfcraft_graph::ImageBytes(std::sync::Arc::new(picture())), alt: "Grafico dei tassi".into() },
+            None,
+            [620.0, -120.0],
+            Author::User,
+        )
+        .unwrap();
+    g.add_edge(note, ids[0], kinds[1], Strength::Weak, None, Author::User).unwrap();
+    g.add_edge(pic, ids[4], kinds[2], Strength::Medium, None, Author::User).unwrap();
+    g.add_edge(ids[2], ids[1], kinds[3], Strength::Strong, None, Author::User).unwrap();
+    ids.extend([note, pic]);
+    assert!(h.state_mut().execute("map.open"));
+    h.run_steps(6);
+    (h, ids)
+}
+
+/// A card of the whole map: the node with this label on the board (the panel's graph names it
+/// too).
+fn card<'a>(h: &'a Harness<'static, PdfCraftApp>, label: &'a str) -> egui_kittest::Node<'a> {
+    let board = h.get_by_label("The whole map").rect();
+    h.get_by(move |n| {
+        n.role() == Role::Button
+            && n.label().as_deref() == Some(label)
+            && n.bounding_box().is_some_and(|b| board.contains(egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32)))
+    })
+}
+
+/// Steps until `done`, letting time pass for glides and previews.
+fn settle(h: &mut Harness<'static, PdfCraftApp>, done: impl Fn(&Harness<'static, PdfCraftApp>) -> bool) -> bool {
+    support::step_until(h, |h| {
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        done(h)
+    })
+}
+
+#[test]
+fn the_whole_map_fits_its_cards_and_previews_the_one_the_pointer_rests_on() {
+    let (mut h, _) = whole_map("the_whole_map_fits_its_c");
+    // Fitted when it opens: every card whole on the board.
+    let labels = [
+        "La banca centrale ha alzato il tasso",
+        "L'inflazione è scesa",
+        "Il calo ha sorpreso",
+        "Non c'è",
+        "Politica monetaria",
+        "Picture: Grafico dei tassi",
+    ];
+    let fitted = settle(&mut h, |h| {
+        let board = h.get_by_label("The whole map").rect();
+        labels.iter().all(|l| h.query_all_by_label(l).any(|n| board.contains_rect(n.rect())))
+    });
+    assert!(fitted, "every card on the board");
+    h.run_steps(4);
+    shot(&mut h, "whole-map.png");
+    // Resting on a snippet from the open document: its passage, rendered.
+    let render = "Page 2 of tassi.pdf, rendered";
+    assert!(h.query_by_label(render).is_none());
+    card(&h, "L'inflazione è scesa").hover();
+    assert!(
+        settle(&mut h, |h| h.query_by_label(render).is_some() && h.state().views[0].has_passage_raster(1)),
+        "the passage rendered beside the card"
+    );
+    let preview = h.get_by_label(render).rect();
+    let board = h.get_by_label("The whole map").rect();
+    assert!(board.contains_rect(preview), "on the board: {preview:?} in {board:?}");
+    assert!(preview.width() >= 300.0, "large enough to read: {preview:?}");
+    h.run_steps(6);
+    shot(&mut h, "whole-map-preview.png");
+    // Away, it goes; a picture's preview is the picture.
+    h.get_by_label("The whole map").hover();
+    assert!(settle(&mut h, |h| h.query_by_label(render).is_none()), "the preview closes");
+    card(&h, "Picture: Grafico dei tassi").hover();
+    assert!(settle(&mut h, |h| h.query_by_label("Grafico dei tassi").is_some()), "the picture's preview");
+    h.run_steps(6);
+    shot(&mut h, "whole-map-picture.png");
+}
+
+#[test]
+fn the_whole_maps_side_panel_shows_the_picked_card_and_folds_away() {
+    let (mut h, ids) = whole_map("the_whole_maps_side_pane");
+    // The board is narrow here: the panel starts folded away, and the toolbar opens it.
+    assert!(h.query_by_label("Add note").is_none());
+    h.get_by_label("Show the side panel").click();
+    h.run_steps(3);
+    h.get_by_label("Add note");
+    // The board is narrower: the map is fitted to it again, every card whole.
+    let refitted = settle(&mut h, |h| {
+        let board = h.get_by_label("The whole map").rect();
+        ["Politica monetaria", "Picture: Grafico dei tassi", "Non c'è"].iter().all(|l| h.query_all_by_label(l).any(|n| board.contains_rect(n.rect())))
+    });
+    assert!(refitted, "fitted to the narrower board");
+    card(&h, "Politica monetaria").click();
+    h.run_steps(3);
+    assert_eq!(h.state().maps.picked, Some(MapPicked::Node(ids[4])));
+    h.get_by_label("Remove node");
+    shot(&mut h, "whole-map-side.png");
+    if std::env::var("PDFCRAFT_MAP_SHOTS").is_ok() {
+        h.state_mut().set_option("theme", "dark").unwrap();
+        h.run_steps(4);
+        shot(&mut h, "whole-map-dark.png");
+    }
+    h.get_by_label("Hide the side panel").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Add note").is_none(), "folded away again");
+}

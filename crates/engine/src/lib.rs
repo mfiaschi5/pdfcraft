@@ -25,6 +25,7 @@ pub mod commands;
 mod comments;
 pub mod compare;
 mod copy_image;
+pub use copy_image::picture_rgba;
 pub mod dates;
 mod document;
 mod edit;
