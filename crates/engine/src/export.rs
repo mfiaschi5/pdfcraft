@@ -138,6 +138,33 @@ impl Exporter {
         encode_png(r.width, r.height, &r.rgba)
     }
 
+    /// The part `area` of page `page` ([x0, y0, x1, y1] in points from the page's top-left, y
+    /// down, as displayed) as a PNG, drawn at `dpi` or less: no side over `max_side` pixels.
+    /// The part off the page is left out; nothing of the page in it is an error.
+    pub fn region_png(&mut self, page: usize, area: [f32; 4], dpi: f64, max_side: u32) -> Result<Vec<u8>, String> {
+        self.check(page)?;
+        let &(pw, ph) = self.sizes.get(page).ok_or_else(|| format!("page {} does not exist", page + 1))?;
+        let [x0, y0, x1, y1] = area;
+        let (x0, x1) = (x0.min(x1).max(0.0), x0.max(x1).min(pw));
+        let (y0, y1) = (y0.min(y1).max(0.0), y0.max(y1).min(ph));
+        if !(x1 - x0 >= 1.0 && y1 - y0 >= 1.0) {
+            return Err("that part of the page is empty".into());
+        }
+        let side = max_side.max(1) as f32;
+        let scale = ((dpi.clamp(18.0, 1200.0) / 72.0) as f32).min(side / (x1 - x0)).min(side / (y1 - y0));
+        // Whole device pixels inside the page at this scale; every value is finite and not
+        // negative here, so the casts don't truncate a sign.
+        let (left, top) = ((x0 * scale).floor(), (y0 * scale).floor());
+        let right = (x1 * scale).ceil().min((pw * scale).floor()).max(left + 1.0);
+        let bottom = (y1 * scale).ceil().min((ph * scale).floor()).max(top + 1.0);
+        let tile = pdfcraft_render::Tile { x: left as u32, y: top as u32, w: (right - left) as u32, h: (bottom - top) as u32 };
+        let r = self.renderer.render(RenderRequest { page, scale, tile: Some(tile), ..Default::default() });
+        if let Some(e) = r.error {
+            return Err(format!("page {}: {e}", page + 1));
+        }
+        encode_png(r.width, r.height, &r.rgba)
+    }
+
     /// Page `page` as an image file of `format`, which says the resolution it was drawn at.
     pub fn image(&mut self, page: usize, dpi: f64, format: ImageFormat) -> Result<Vec<u8>, String> {
         self.check(page)?;

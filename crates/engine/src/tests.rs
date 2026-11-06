@@ -8257,6 +8257,94 @@ fn copy_image_finds_a_picture_inside_form_artwork_under_text() {
     assert!(d.page_image_copy_file(0, 1).is_err());
 }
 
+/// Save Image As and Add Image to Map on grouped Form artwork: a group that only wraps a picture
+/// gives that picture as stored; a figure drawn in vectors (as LaTeX and plotting tools write
+/// them) gives the part of the page it covers, as the page draws it.
+#[test]
+fn saving_grouped_artwork_gives_its_picture_or_the_figure_as_drawn() {
+    let jpeg = jpeg_bytes();
+    let content = b"q 100 0 0 100 50 20 cm /Fm1 Do Q q 1 0 0 1 50 180 cm /Fm2 Do Q".to_vec();
+    let stream = |dict: &str, data: &[u8]| {
+        let mut o = format!("<< {dict} /Length {} >>\nstream\n", data.len()).into_bytes();
+        o.extend_from_slice(data);
+        o.extend_from_slice(b"\nendstream");
+        o
+    };
+    let objs: Vec<Vec<u8>> = vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 300] >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /XObject << /Fm1 5 0 R /Fm2 7 0 R >> >> >>".to_vec(),
+        stream("", &content),
+        // A picture wrapped in a group, as Word writes it.
+        stream("/Type /XObject /Subtype /Form /BBox [0 0 1 1] /Resources << /XObject << /Im1 6 0 R >> >>", b"q /Im1 Do Q"),
+        stream("/Type /XObject /Subtype /Image /Width 3 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode", &jpeg),
+        // A figure: a red bar drawn in vectors, with the same picture beside it.
+        stream(
+            "/Type /XObject /Subtype /Form /BBox [0 0 100 60] /Resources << /XObject << /Im1 6 0 R >> >>",
+            b"1 0 0 rg 0 0 100 60 re f q 10 0 0 10 0 0 cm /Im1 Do Q",
+        ),
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(o);
+        out.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    let mut s = Session::new();
+    let id = s.open("figures.pdf", None, Arc::new(out), None).unwrap();
+    let d = s.get(id).unwrap();
+    let images = d.page_images(0);
+    let index = |name: &str| images.iter().position(|i| i.name == name).unwrap_or_else(|| panic!("{name} in {images:?}"));
+    assert!(images.iter().all(|i| i.is_form), "{images:?}");
+    // The wrapped picture, as stored.
+    assert_eq!(d.page_image_file(0, index("Fm1")).unwrap(), ("jpg", jpeg));
+    // The figure as the page draws it, at 300 dpi: 100 × 60 points.
+    let (ext, png) = d.page_image_file(0, index("Fm2")).unwrap();
+    assert_eq!(ext, "png");
+    let figure = image::load_from_memory(&png).unwrap().into_rgba8();
+    let (w, h) = figure.dimensions();
+    assert!(w.abs_diff(417) <= 2 && h.abs_diff(250) <= 2, "{w} × {h}");
+    let px = figure.get_pixel(w * 3 / 4, h / 2);
+    assert!(px[0] > 200 && px[1] < 60 && px[2] < 60, "the red bar: {px:?}");
+}
+
+/// Add Image to Map: a picture larger than a map takes is made smaller to fit, and a small one is
+/// kept as saved.
+#[test]
+fn a_picture_too_large_for_a_map_is_made_smaller_to_fit() {
+    // Noise doesn't compress: 1600 × 1200 of it is several megabytes as a PNG.
+    let mut seed = 0x2545_f491_u32;
+    let px = image::RgbImage::from_fn(1600, 1200, |_, _| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        image::Rgb(seed.to_le_bytes()[..3].try_into().unwrap())
+    });
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgb8(px).write_to(&mut png, image::ImageFormat::Png).unwrap();
+    let png = png.into_inner();
+    assert!(png.len() > 2 << 20);
+    let mut s = Session::new();
+    let pic = s.create_from_images(&[("noise.png".into(), png)]).unwrap();
+    let id = s.open("noise.pdf", None, pic, None).unwrap();
+    let d = s.get(id).unwrap();
+    let max = 2 << 20;
+    let fitted = d.page_image_for_map(0, 0, max).unwrap();
+    assert!(fitted.len() <= max && fitted.starts_with(&[0xFF, 0xD8, 0xFF]), "{} bytes", fitted.len());
+    let (w, h) = image::load_from_memory(&fitted).unwrap().into_rgb8().dimensions();
+    assert_eq!(w * 3, h * 4, "the same shape: {w} × {h}");
+    // Room for it as it is: unchanged.
+    assert_eq!(d.page_image_for_map(0, 0, usize::MAX).unwrap(), d.page_image_file(0, 0).unwrap().1);
+}
+
 /// Copy Image reads a JBIG2 image's `/JBIG2Globals`: here they hold the page information, and the
 /// image's own stream only an extension segment decoders skip, so it has a picture only through
 /// them. Its default pixel is black.

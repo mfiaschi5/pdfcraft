@@ -3801,7 +3801,20 @@ fn editing_form_artwork_through_tools() {
     assert_eq!(before["pixels"], json!([0, 0]));
     assert_eq!(before["rect"], json!([20.0, 20.0, 100.0, 60.0]));
     let rendered_before = a.call("page_render", &json!({"doc": doc, "page": 1, "dpi": 72})).unwrap();
-    assert!(a.call("image_save", &json!({"doc": doc, "page": 1, "image": 1, "path": "out/figure"})).is_err());
+    // Vector artwork is saved as the page draws it: a PNG of the 80 × 40 point figure at 300 dpi.
+    let saved = ok(&mut a, "image_save", json!({"doc": doc, "page": 1, "image": 1, "path": "out/figure"}));
+    assert_eq!(saved["format"], "png");
+    let png = std::fs::read(dir.join("out/figure.png")).unwrap();
+    let decoder = png::Decoder::new(std::io::Cursor::new(png));
+    let mut reader = decoder.read_info().unwrap();
+    let (w, h) = (reader.info().width, reader.info().height);
+    assert!(w.abs_diff(333) <= 2 && h.abs_diff(167) <= 2, "{w} × {h}");
+    let mut buf = vec![0; reader.output_buffer_size().unwrap()];
+    let frame = reader.next_frame(&mut buf).unwrap();
+    let channels = frame.color_type.samples();
+    let middle = ((h / 2 * w + w / 2) as usize) * channels;
+    let px = &buf[middle..middle + 3];
+    assert!(px[0].abs_diff(51) <= 3 && px[1].abs_diff(128) <= 3 && px[2].abs_diff(230) <= 3, "the figure's blue: {px:?}");
     ok(&mut a, "image_edit", json!({"doc": doc, "page": 1, "image": 1, "action": "move", "rect": [40, 50, 120, 90]}));
     assert_eq!(ok(&mut a, "page_images", json!({"doc": doc, "page": 1}))["images"][0]["rect"], json!([40.0, 50.0, 120.0, 90.0]));
     let rendered_moved = a.call("page_render", &json!({"doc": doc, "page": 1, "dpi": 72})).unwrap();
