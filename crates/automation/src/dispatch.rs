@@ -183,6 +183,7 @@ impl Automation {
             "graph_connect" => self.graph_connect(&a)?,
             "graph_add_kind" => self.graph_add_kind(&a)?,
             "graph_remove" => self.graph_remove(&a)?,
+            "graph_set_text" => self.graph_set_text(&a)?,
             "graph_layout" => self.graph_layout(&a)?,
             "graph_export" => self.graph_export(&a)?,
             "graph_import" => self.graph_import(&a)?,

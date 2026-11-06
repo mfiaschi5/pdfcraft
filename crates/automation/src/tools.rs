@@ -1564,6 +1564,8 @@ pub fn tools() -> Vec<ToolDef> {
         t("graph_remove", "Remove from a concept map", "Remove a node (and its connections) or a connection from a concept map.")
             .destructive()
             .with(schema(json!({"map": map_arg(), "node": {"type":"integer","minimum":1}, "connection": {"type":"integer","minimum":1}}), &["map"])),
+        t("graph_set_text", "Edit a node's text", "Change what a node of a concept map says, keeping what it is, its source and its connections: a snippet's or note's text, a concept's name, a picture's description. Trimmed; only a picture's description may be empty.")
+            .with(schema(json!({"map": map_arg(), "node": {"type":"integer","minimum":1}, "text": {"type":"string","maxLength":65536}}), &["map", "node", "text"])),
         t("graph_layout", "Tidy up a concept map", "Arrange a concept map's nodes with a force-directed layout: connected nodes pull together (strong connections more), all nodes push apart.")
             .with(schema(json!({"map": map_arg()}), &["map"])),
         t("graph_export", "Export a concept map", "Write a concept map as JSON Canvas (Obsidian Canvas) or GraphML (yEd, Gephi). Pictures are written as their descriptions.")

@@ -20,7 +20,7 @@ use pdfcraft_ai::text::{capped, prefix};
 use pdfcraft_graph::{Anchor, Author, Content, Graph, Line, NodeId, Strength};
 use pdfcraft_render::DocInfo;
 
-use super::{Action, Here, MapState, Picked, colour, strength_name};
+use super::{Action, EditIn, Here, MapState, Picked, colour, source_label, strength_name};
 use crate::DocView;
 use crate::canvas::node_mark;
 use crate::theme::{self, Tokens};
@@ -55,6 +55,16 @@ pub(crate) enum Host {
     Panel,
     /// The map's own window.
     Window,
+}
+
+impl Host {
+    /// Where a node edited from this graph shows its editor.
+    pub(crate) fn edit_in(self) -> EditIn {
+        match self {
+            Self::Panel => EditIn::Panel,
+            Self::Window => EditIn::Window,
+        }
+    }
 }
 
 /// How map positions become screen positions.
@@ -358,6 +368,9 @@ fn shortcuts(ui: &mut egui::Ui) {
         ("1  2  3".to_owned(), tl!("Weak, medium, strong connections")),
         ("K".to_owned(), tl!("Next kind of connection")),
         (key("Space").to_owned(), tl!("Keep the preview open")),
+        ("E  F2".to_owned(), tl!("Edit the node")),
+        (key("Delete").to_owned(), tl!("Remove the node (Undo brings it back)")),
+        (tl!("Right-click").to_owned(), tl!("Edit, open or remove the node")),
         ("+  -  0".to_owned(), tl!("Zoom in, zoom out, fit")),
         (key("Esc").to_owned(), tl!("Cancel, then let go of the graph")),
     ];
@@ -552,6 +565,17 @@ fn keys(ui: &egui::Ui, maps: &mut MapState, host: Host, placed: &Placed, bg: &eg
     if pressed(Key::Num0) {
         view.fit_again();
     }
+    // E (or F2) edits the node under the cursor; Delete removes it (Undo brings it back).
+    if (pressed(Key::E) || pressed(Key::F2))
+        && let Some(cursor) = view.cursor
+    {
+        actions.push(Action::Edit(cursor, host.edit_in()));
+    }
+    if (pressed(Key::Delete) || pressed(Key::Backspace))
+        && let Some(cursor) = view.cursor.take()
+    {
+        actions.push(Action::Remove(Picked::Node(cursor)));
+    }
     // Escape: stop connecting, else close the kept preview, else let the keyboard go.
     if pressed(Key::Escape) && view.connect_from.take().is_none() && view.pinned.take().is_none() {
         ui.memory_mut(|m| m.surrender_focus(bg.id));
@@ -669,6 +693,25 @@ fn node_input(
     let name = capped(node.content.text(), 80);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &name));
     let response = theme::hand(response);
+    let anchor = node.anchor.clone();
+    response.context_menu(|ui| {
+        if ui.add(egui::Button::image_and_text(crate::icons::image("pencil", 14.0, ui.visuals().text_color()), tl!("Edit"))).clicked() {
+            actions.push(Action::Edit(id, host.edit_in()));
+            ui.close();
+        }
+        if let Some(a) = &anchor {
+            let label = crate::i18n::fmt(tl!("Open {source}"), &[("source", &source_label(a))]);
+            if ui.add(egui::Button::image_and_text(crate::icons::image("file-text", 14.0, ui.visuals().text_color()), label)).clicked() {
+                actions.push(Action::Reveal(id));
+                ui.close();
+            }
+        }
+        ui.separator();
+        if ui.add(egui::Button::image_and_text(crate::icons::image("trash-2", 14.0, ui.visuals().text_color()), tl!("Remove node"))).clicked() {
+            actions.push(Action::Remove(Picked::Node(id)));
+            ui.close();
+        }
+    });
     let pointer = ui.input(|i| i.pointer.interact_pos());
     let view = maps.graph_view(host);
     if response.clicked() {

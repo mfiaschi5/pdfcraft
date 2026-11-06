@@ -53,6 +53,31 @@ fn connections_are_checked() {
 }
 
 #[test]
+fn a_nodes_text_is_changed_and_it_stays_what_it_is() {
+    let (mut g, a, b, c) = sample();
+    let anchored = g.node(a).unwrap().anchor.clone();
+    g.set_text(a, "  Rates rose.  ").unwrap();
+    assert_eq!(g.node(a).unwrap().content, Content::Text { text: "Rates rose.".into() });
+    assert_eq!(g.node(a).unwrap().anchor, anchored, "the source stays");
+    g.set_text(b, "Central banks").unwrap();
+    assert_eq!(g.node(b).unwrap().content, Content::Concept { label: "Central banks".into() });
+    // A picture keeps its picture; its description may go.
+    g.set_text(c, "").unwrap();
+    assert!(matches!(&g.node(c).unwrap().content, Content::Image { image, alt } if alt.is_empty() && image.0.as_slice() == PNG));
+    let note = g.add_node(Content::Note { text: "Check".into() }, None, [0.0, 0.0], Author::User).unwrap();
+    g.set_text(note, "Check the October data").unwrap();
+    assert_eq!(g.node(note).unwrap().content.text(), "Check the October data");
+    // Nothing, too long, or no such node: refused, and nothing changes.
+    let before = g.clone();
+    assert_eq!(g.set_text(b, "   "), Err(GraphError::Empty("the text")));
+    assert_eq!(g.set_text(b, &"x".repeat(MAX_LABEL_BYTES + 1)), Err(GraphError::TooLong("the label")));
+    assert_eq!(g.set_text(NodeId(999), "x"), Err(GraphError::NoNode(999)));
+    assert_eq!(g, before);
+    // Its connections stay.
+    assert_eq!(g.edges().len(), 2);
+}
+
+#[test]
 fn the_users_own_kinds_join_the_default_ones() {
     let (mut g, a, b, _) = sample();
     let defaults = g.kinds().len();

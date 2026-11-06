@@ -23,7 +23,7 @@ use pdfcraft_ai::text::{capped, prefix};
 use pdfcraft_graph::{Anchor, Author, Content, Line, NodeId, Strength};
 
 use super::graph_view::{Doc, rendered};
-use super::{Action, MapState, Picked, colour, source_label, strength_name};
+use super::{Action, EditIn, MapState, Picked, colour, editor_ui, source_label, strength_name};
 use crate::theme::{self, Tokens};
 
 /// How long the pointer rests on a card before its preview shows (seconds), and how long the
@@ -232,6 +232,7 @@ pub(super) fn canvas(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, doc: Op
         .and_then(|p| cards.iter().rev().find(|c| c.rect.contains(p)).map(|c| c.id));
     edges(ui, &painter, t, maps, &cards, near.as_ref(), hovered, view.zoom);
     nodes(ui, &painter, t, maps, &cards, near.as_ref(), hovered, view.zoom, actions);
+    card_editor(ui, t, maps, &cards, rect, actions);
     if maps.graph.nodes().is_empty() {
         painter.text(
             rect.center(),
@@ -244,7 +245,7 @@ pub(super) fn canvas(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, doc: Op
         legend(&painter, t, rect);
     }
     // The preview of the card the pointer rests on, unless something is being dragged.
-    let busy = maps.connecting.is_some() || ui.input(|i| i.pointer.any_down());
+    let busy = maps.connecting.is_some() || maps.editing.is_some() || ui.input(|i| i.pointer.any_down());
     let resting = match (hovered, maps.board.hover) {
         (Some(id), Some((was, since))) if was == id => Some((id, since)),
         (Some(id), _) => Some((id, now)),
@@ -639,11 +640,14 @@ fn nodes(
         if response.clicked() {
             maps.picked = Some(Picked::Node(card.id));
         }
-        if response.double_clicked()
-            && let Some(a) = &n.anchor
-        {
-            actions.push(Action::OpenSource(a.clone()));
+        // A double-click opens a snippet's or picture's source, and edits a note or a concept.
+        if response.double_clicked() {
+            match &n.anchor {
+                Some(a) => actions.push(Action::OpenSource(a.clone())),
+                None => actions.push(Action::Edit(card.id, EditIn::Board)),
+            }
         }
+        response.context_menu(|ui| card_menu(ui, t, card.id, n.anchor.as_ref(), actions));
         if maps.connecting.is_none() {
             if response.drag_started() {
                 maps.board.dragging = Some(card.id);
@@ -687,6 +691,45 @@ fn nodes(
             maps.connecting = None;
         }
     }
+}
+
+/// A card's menu: edit it, open its source, remove it.
+fn card_menu(ui: &mut egui::Ui, t: &Tokens, id: NodeId, anchor: Option<&Anchor>, actions: &mut Vec<Action>) {
+    if ui.add(egui::Button::image_and_text(crate::icons::image("pencil", 14.0, t.icon), tl!("Edit"))).clicked() {
+        actions.push(Action::Edit(id, EditIn::Board));
+        ui.close();
+    }
+    if let Some(a) = anchor {
+        let label = crate::i18n::fmt(tl!("Open {source}"), &[("source", &source_label(a))]);
+        if ui.add(egui::Button::image_and_text(crate::icons::image("file-text", 14.0, t.icon), label)).clicked() {
+            actions.push(Action::OpenSource(a.clone()));
+            ui.close();
+        }
+    }
+    ui.separator();
+    if ui.add(egui::Button::image_and_text(crate::icons::image("trash-2", 14.0, t.icon), tl!("Remove node"))).clicked() {
+        actions.push(Action::Remove(Picked::Node(id)));
+        ui.close();
+    }
+}
+
+/// The editor of a card being edited, over the card: at least as wide as a note's card, kept on
+/// the board.
+fn card_editor(ui: &egui::Ui, t: &Tokens, maps: &mut MapState, cards: &[Card], board: Rect, actions: &mut Vec<Action>) {
+    let Some(id) = maps.editing.as_ref().filter(|e| e.place == EditIn::Board).map(|e| e.id) else { return };
+    let Some(card) = cards.iter().find(|c| c.id == id) else { return };
+    let width = card.rect.width().max(320.0).min(board.width() - 16.0);
+    egui::Area::new(ui.scope_id().with(("map-card-editor", id.0)))
+        .order(egui::Order::Foreground)
+        .fixed_pos(card.rect.min)
+        .constrain_to(board.shrink(6.0))
+        .show(ui.ctx(), |ui| {
+            let look = look(t, card.kind);
+            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(10)).stroke(Stroke::new(1.5, look.tint)).show(ui, |ui| {
+                ui.set_width(width - 20.0);
+                editor_ui(ui, t, maps, actions);
+            });
+        });
 }
 
 /// One card: its shadow (deeper as it lifts), its fill and border by kind, its kind's colour on

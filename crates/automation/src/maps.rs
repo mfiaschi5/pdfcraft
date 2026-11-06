@@ -177,6 +177,16 @@ impl Automation {
         Ok(json!({ "removed": true }))
     }
 
+    pub(crate) fn graph_set_text(&mut self, a: &Args) -> Result<Value> {
+        let node = NodeId(u64::try_from(a.int("node")?).map_err(|_| ToolError::InvalidArgs("node is a node id".into()))?);
+        let text = a.str("text")?.to_owned();
+        let (said, _) = self.edit_map(a, |g| {
+            g.set_text(node, &text).map_err(failed)?;
+            Ok(g.node(node).map(|n| n.content.text().to_owned()).unwrap_or_default())
+        })?;
+        Ok(json!({ "id": node.0, "text": said }))
+    }
+
     pub(crate) fn graph_layout(&mut self, a: &Args) -> Result<Value> {
         let (steps, _) = self.edit_map(a, |g| Ok(layout::tidy(g, None, 300)))?;
         Ok(json!({ "steps": steps }))

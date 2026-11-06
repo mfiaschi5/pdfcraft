@@ -3178,3 +3178,15 @@ certificate	SHA-256 digest	Impronta SHA-256
 	Fit the map	Adatta la mappa
 	Hide the side panel	Nascondi il pannello laterale
 	Show the side panel	Mostra il pannello laterale
+	Edit what the node says	Modifica ciò che dice il nodo
+	Remove the node and its connections (Undo brings it back)	Rimuovi il nodo e i suoi collegamenti (Annulla lo riporta)
+	Edit {kind}	Modifica {kind}
+	Its name	Il suo nome
+	What the picture shows	Cosa mostra l'immagine
+	Its text	Il suo testo
+	{save} saves · {esc} cancels	{save} salva · {esc} annulla
+	Edit the node	Modifica il nodo
+	Remove the node (Undo brings it back)	Rimuovi il nodo (Annulla lo riporta)
+	Right-click	Clic destro
+	Edit, open or remove the node	Modifica, apri o rimuovi il nodo
+	Edit node	Modifica del nodo

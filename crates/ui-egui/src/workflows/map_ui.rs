@@ -111,10 +111,32 @@ pub struct MapState {
     pending_mark: Option<PendingMark>,
     /// The whole map's board: its preview, glides and pictures.
     pub(crate) board: board::Board,
+    /// The node whose text is being edited, and where.
+    pub editing: Option<Editing>,
 }
 
 struct PendingMark {
     anchor: Anchor,
+}
+
+/// Where a node is being edited: its editor shows there.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum EditIn {
+    /// The whole map, over the node's card.
+    Board,
+    /// The graph beside the document, in the panel under it.
+    Panel,
+    /// The map's own window, beside its graph.
+    Window,
+}
+
+/// A node's text being edited.
+pub struct Editing {
+    pub id: NodeId,
+    pub text: String,
+    pub place: EditIn,
+    /// The field takes the keyboard on its first frame.
+    focus: bool,
 }
 
 /// The desktop app's folder for maps: `Maps` in the assistant's folder.
@@ -152,6 +174,7 @@ impl Default for MapState {
             window: false,
             pending_mark: None,
             board: board::Board::default(),
+            editing: None,
         }
     }
 }
@@ -198,6 +221,7 @@ impl MapState {
         self.review = None;
         self.connecting = None;
         self.moved = false;
+        self.editing = None;
         // Another map: fitted to the board when it shows.
         self.board.fit = true;
     }
@@ -652,7 +676,13 @@ impl PdfCraftApp {
     /// The map's keys, while it shows: Delete removes what is selected; Escape clears the
     /// selection, then goes back to the document. Typing in a box keeps its keys.
     pub(crate) fn map_keys(&mut self, ctx: &egui::Context) {
-        if ctx.egui_wants_keyboard_input() {
+        // While a node is edited, its editor has the keys (Escape cancels it there).
+        if ctx.egui_wants_keyboard_input() || self.maps.editing.is_some() {
+            return;
+        }
+        let edit = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::F2));
+        if edit && let Some(Picked::Node(id)) = self.maps.picked {
+            run(self, Action::Edit(id, EditIn::Board));
             return;
         }
         let (delete, escape) =
@@ -724,6 +754,11 @@ pub(crate) enum Action {
     Reveal(NodeId),
     /// The map in a window of its own, or not.
     Window(bool),
+    /// Edit a node's text, in this view.
+    Edit(NodeId, EditIn),
+    /// Keep the text being edited, or leave it.
+    SaveEdit,
+    CancelEdit,
 }
 
 /// The map workspace, in the document area.
@@ -962,6 +997,78 @@ fn side(ui: &mut egui::Ui, t: &Tokens, app: &mut PdfCraftApp, actions: &mut Vec<
     });
 }
 
+/// A node's Edit and Remove buttons, in `place`.
+fn node_buttons(ui: &mut egui::Ui, t: &Tokens, id: NodeId, place: EditIn, actions: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        if ui
+            .add(egui::Button::image_and_text(crate::icons::image("pencil", 13.0, t.icon), tl!("Edit")))
+            .on_hover_text(tl!("Edit what the node says"))
+            .clicked()
+        {
+            actions.push(Action::Edit(id, place));
+        }
+        if ui
+            .add(egui::Button::image_and_text(crate::icons::image("trash-2", 13.0, t.icon), tl!("Remove node")))
+            .on_hover_text(tl!("Remove the node and its connections (Undo brings it back)"))
+            .clicked()
+        {
+            actions.push(Action::Remove(Picked::Node(id)));
+        }
+    });
+}
+
+/// The editor of the node being edited: what it says, Save and Cancel. ⌘↩ (and ↩ for a concept's
+/// one-line name) saves, Escape cancels.
+pub(crate) fn editor_ui(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, actions: &mut Vec<Action>) {
+    let Some(e) = maps.editing.as_mut() else { return };
+    let Some(node) = maps.graph.node(e.id) else {
+        maps.editing = None;
+        return;
+    };
+    let kind = board::Kind::of(&node.content);
+    let look = board::look(t, kind);
+    ui.horizontal(|ui| {
+        ui.add(crate::icons::image("pencil", 13.0, look.tint));
+        let title = crate::i18n::fmt(tl!("Edit {kind}"), &[("kind", &kind.name().to_lowercase())]);
+        ui.label(egui::RichText::new(title).font(theme::semibold(12.5)).color(look.tint));
+    });
+    let one_line = kind == board::Kind::Concept;
+    let (limit, hint_text) = match kind {
+        board::Kind::Concept => (pdfcraft_graph::MAX_LABEL_BYTES, tl!("Its name")),
+        board::Kind::Picture => (pdfcraft_graph::MAX_TEXT_BYTES, tl!("What the picture shows")),
+        _ => (pdfcraft_graph::MAX_TEXT_BYTES, tl!("Its text")),
+    };
+    let field = if one_line { crate::widgets::line(&mut e.text) } else { crate::widgets::block(&mut e.text).desired_rows(4) };
+    let response = ui.add(field.hint_text(hint_text).desired_width(f32::INFINITY).char_limit(limit));
+    if std::mem::take(&mut e.focus) {
+        response.request_focus();
+    }
+    let empty = e.text.trim().is_empty() && kind != board::Kind::Picture;
+    let enter = one_line && response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+    let save_key = ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter)) || enter;
+    let cancel_key = ui.input(|i| i.key_pressed(egui::Key::Escape));
+    let mut save = false;
+    let mut cancel = false;
+    ui.horizontal(|ui| {
+        let button = egui::Button::new(egui::RichText::new(tl!("Save")).color(egui::Color32::WHITE)).fill(t.accent);
+        save = ui.add_enabled(!empty, button).clicked();
+        cancel = ui.button(tl!("Cancel")).clicked();
+        // A one-line name is saved with Enter; longer text, where Enter is a new line, with ⌘↩.
+        let save_with = if one_line {
+            crate::i18n::key_name("Enter").to_owned()
+        } else {
+            crate::commands::shortcut_label(ui.ctx(), pdfcraft_engine::commands::Shortcut::cmd("Enter"))
+        };
+        let keys = crate::i18n::fmt(tl!("{save} saves · {esc} cancels"), &[("save", &save_with), ("esc", crate::i18n::key_name("Esc"))]);
+        ui.label(egui::RichText::new(keys).small().color(t.text_faint));
+    });
+    if (save || (save_key && !empty)) && !cancel {
+        actions.push(Action::SaveEdit);
+    } else if cancel || cancel_key {
+        actions.push(Action::CancelEdit);
+    }
+}
+
 fn node_ui(ui: &mut egui::Ui, t: &Tokens, graph: &Graph, id: NodeId, actions: &mut Vec<Action>) {
     let Some(n) = graph.node(id) else { return };
     ui.label(egui::RichText::new(prefix(n.content.text(), 2_000)).size(13.5));
@@ -976,9 +1083,7 @@ fn node_ui(ui: &mut egui::Ui, t: &Tokens, graph: &Graph, id: NodeId, actions: &m
     }
     let links = graph.edges().iter().filter(|e| e.from == id || e.to == id).count();
     hint(ui, t, &crate::i18n::fmt(tl!("Connections: {n}"), &[("n", &links.to_string())]));
-    if ui.button(tl!("Remove node")).clicked() {
-        actions.push(Action::Remove(Picked::Node(id)));
-    }
+    node_buttons(ui, t, id, EditIn::Board, actions);
 }
 
 fn edge_ui(ui: &mut egui::Ui, graph: &Graph, id: EdgeId, actions: &mut Vec<Action>) {
@@ -1148,8 +1253,27 @@ fn run(app: &mut PdfCraftApp, action: Action) {
         }
         Action::Remove(Picked::Node(id)) => {
             app.maps.picked = None;
+            if app.maps.editing.as_ref().is_some_and(|e| e.id == id) {
+                app.maps.editing = None;
+            }
             app.change_map("Remove node", |g| g.remove_node(id).map_err(|e| e.to_string()));
         }
+        Action::Edit(id, place) => {
+            if let Some(n) = app.maps.graph.node(id) {
+                app.maps.editing = Some(Editing { id, text: n.content.text().to_owned(), place, focus: true });
+                app.maps.picked = Some(Picked::Node(id));
+            }
+        }
+        Action::SaveEdit => {
+            if let Some(e) = app.maps.editing.take() {
+                let same = app.maps.graph.node(e.id).is_some_and(|n| n.content.text() == e.text.trim());
+                // Refused (empty, too long): the editor stays, with what was typed.
+                if !same && !app.change_map("Edit node", |g| g.set_text(e.id, &e.text).map_err(|x| x.to_string())) {
+                    app.maps.editing = Some(e);
+                }
+            }
+        }
+        Action::CancelEdit => app.maps.editing = None,
         Action::Remove(Picked::Edge(id)) => {
             app.maps.picked = None;
             app.change_map("Remove connection", |g| g.remove_edge(id).map_err(|e| e.to_string()));
@@ -1240,7 +1364,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, here: &H
     }
     ui.separator();
     match maps.picked {
-        Some(Picked::Node(id)) if maps.graph.node(id).is_some() => focus_ui(ui, t, maps, id, &mut actions),
+        Some(Picked::Node(id)) if maps.graph.node(id).is_some() => focus_ui(ui, t, maps, id, EditIn::Panel, &mut actions),
         _ => hint(ui, t, tl!("Add a snippet, or pick a node below, to connect it to others.")),
     }
     ui.separator();
@@ -1266,7 +1390,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, here: &H
 
 /// The node to connect from: its text and source, its connections (each opens the other end's
 /// source), and the nodes it can be connected to, found by their words.
-fn focus_ui(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, id: NodeId, actions: &mut Vec<Action>) {
+fn focus_ui(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, id: NodeId, place: EditIn, actions: &mut Vec<Action>) {
     let Some(n) = maps.graph.node(id).cloned() else { return };
     ui.horizontal(|ui| {
         heading(ui, tl!("Connect"));
@@ -1274,7 +1398,12 @@ fn focus_ui(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, id: NodeId, acti
             actions.push(Action::Unfocus);
         }
     });
-    ui.label(egui::RichText::new(prefix(n.content.text(), 300)).small());
+    if maps.editing.as_ref().is_some_and(|e| e.id == id && e.place == place) {
+        editor_ui(ui, t, maps, actions);
+    } else {
+        ui.label(egui::RichText::new(prefix(n.content.text(), 300)).small());
+        node_buttons(ui, t, id, place, actions);
+    }
     if let Some(a) = &n.anchor
         && ui.small_button(source_label(a)).on_hover_text(tl!("Go to the source")).clicked()
     {
