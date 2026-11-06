@@ -7,7 +7,7 @@
 use egui::{ViewportBuilder, ViewportId};
 
 use super::graph_view::{self, Doc, Host};
-use super::{Action, Here, Picked, focus_ui, heading, hint, run};
+use super::{Action, EditIn, Here, Picked, focus_ui, heading, hint, run};
 use crate::PdfCraftApp;
 use crate::theme::Tokens;
 
@@ -90,7 +90,7 @@ pub(crate) fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     );
                     ui.separator();
                     match maps.picked {
-                        Some(Picked::Node(id)) if maps.graph.node(id).is_some() => focus_ui(ui, &t, maps, id, &mut actions),
+                        Some(Picked::Node(id)) if maps.graph.node(id).is_some() => focus_ui(ui, &t, maps, id, EditIn::Window, &mut actions),
                         _ => hint(ui, &t, tl!("Pick a node to see its connections and connect it to others.")),
                     }
                 });

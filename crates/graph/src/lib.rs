@@ -67,6 +67,8 @@ pub enum GraphError {
     Duplicate,
     #[error("the picture isn't a PNG or JPEG")]
     NotAnImage,
+    #[error("{0} is empty")]
+    Empty(&'static str),
     #[error("the saved map isn't one PdfCraft can read: {0}")]
     Unreadable(String),
     #[error("the saved map is version {0}; this PdfCraft reads version {FORMAT_VERSION}")]
@@ -460,6 +462,20 @@ impl Graph {
         let node = self.nodes.iter_mut().find(|n| n.id == id).ok_or(GraphError::NoNode(id.0))?;
         node.content = content;
         Ok(())
+    }
+
+    /// Change what node `id` says, keeping what it is: a snippet's or note's text, a concept's
+    /// name, a picture's description. Trimmed; only a picture's description may be empty.
+    pub fn set_text(&mut self, id: NodeId, text: &str) -> Result<()> {
+        let text = text.trim().to_owned();
+        let content = match &self.node(id).ok_or(GraphError::NoNode(id.0))?.content {
+            Content::Image { image, .. } => Content::Image { image: image.clone(), alt: text },
+            _ if text.is_empty() => return Err(GraphError::Empty("the text")),
+            Content::Text { .. } => Content::Text { text },
+            Content::Note { .. } => Content::Note { text },
+            Content::Concept { .. } => Content::Concept { label: text },
+        };
+        self.set_content(id, content)
     }
 
     pub fn set_tags(&mut self, id: NodeId, tags: Vec<String>) -> Result<()> {

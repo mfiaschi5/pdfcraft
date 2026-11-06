@@ -510,7 +510,12 @@ fn the_whole_maps_side_panel_shows_the_picked_card_and_folds_away() {
     card(&h, "Politica monetaria").click();
     h.run_steps(3);
     assert_eq!(h.state().maps.picked, Some(MapPicked::Node(ids[4])));
-    h.get_by_label("Remove node");
+    // Its node card, beside the board (the panel beside the document has one too).
+    let board = h.get_by_label("The whole map").rect();
+    assert!(
+        h.query_all_by_label("Remove node").any(|n| n.rect().min.x > board.max.x && n.rect().max.x < board.max.x + 320.0),
+        "the side panel's node card"
+    );
     shot(&mut h, "whole-map-side.png");
     if std::env::var("PDFCRAFT_MAP_SHOTS").is_ok() {
         h.state_mut().set_option("theme", "dark").unwrap();
@@ -520,4 +525,150 @@ fn the_whole_maps_side_panel_shows_the_picked_card_and_folds_away() {
     h.get_by_label("Hide the side panel").click();
     h.run_steps(3);
     assert!(h.query_by_label("Add note").is_none(), "folded away again");
+}
+
+/// The item `label` of the menu just opened at `near` (the app's own menus, tabs and the panel
+/// beside the document have an Edit and a Remove node too).
+fn menu_item<'a>(h: &'a Harness<'static, PdfCraftApp>, label: &'a str, near: egui::Pos2) -> egui_kittest::Node<'a> {
+    let distance = |n: &egui_kittest::Node<'_>| n.rect().center().distance(near);
+    h.get_all_by(move |n| n.label().as_deref() == Some(label) && n.role() == Role::Button)
+        .min_by(|a, b| distance(a).total_cmp(&distance(b)))
+        .unwrap_or_else(|| panic!("no {label} in the menu"))
+}
+
+/// The text field holding `value`.
+fn field<'a>(h: &'a Harness<'static, PdfCraftApp>, value: &'a str) -> egui_kittest::Node<'a> {
+    h.get_by(move |n| matches!(n.role(), Role::TextInput | Role::MultilineTextInput) && n.value().as_deref() == Some(value))
+}
+
+/// Replace what the focused field holds with `text`.
+fn retype(h: &mut Harness<'static, PdfCraftApp>, text: &str) {
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+    h.run_steps(1);
+    h.event(egui::Event::Text(text.into()));
+    h.run_steps(2);
+}
+
+fn text_of(h: &Harness<'static, PdfCraftApp>, id: NodeId) -> Option<String> {
+    h.state().maps.graph.node(id).map(|n| n.content.text().to_owned())
+}
+
+#[test]
+fn nodes_are_edited_and_removed_on_the_whole_map() {
+    let (mut h, ids) = whole_map("nodes_are_edited_and_rem");
+    settle(&mut h, |h| card(h, "Politica monetaria").rect().width() > 0.0);
+    // The card's menu: Edit opens an editor over the card, with its text.
+    let at = card(&h, "Politica monetaria").rect().center();
+    card(&h, "Politica monetaria").click_secondary();
+    h.run_steps(3);
+    menu_item(&h, "Edit", at).click();
+    h.run_steps(3);
+    assert!(h.state().maps.editing.is_some());
+    field(&h, "Politica monetaria");
+    shot(&mut h, "whole-map-edit.png");
+    retype(&mut h, "Politica dei tassi");
+    h.get_by_label("Save").click();
+    h.run_steps(3);
+    assert_eq!(text_of(&h, ids[4]).as_deref(), Some("Politica dei tassi"));
+    assert!(h.state().maps.editing.is_none());
+    let edges = h.state().maps.graph.edges().len();
+    // Enter edits the picked card; Escape leaves it as it was.
+    card(&h, "Ricontrollare i dati di ottobre prima della relazione.").click();
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert!(h.state().maps.editing.as_ref().is_some_and(|e| e.id == ids[5]), "Enter edits the picked card");
+    retype(&mut h, "Something else");
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert!(h.state().maps.editing.is_none());
+    assert_eq!(text_of(&h, ids[5]).as_deref(), Some("Ricontrollare i dati di ottobre prima della relazione."), "cancelled");
+    assert!(h.state().maps.open, "Escape left the editor, not the map");
+    // An empty text isn't saved.
+    h.key_press(egui::Key::F2);
+    h.run_steps(3);
+    retype(&mut h, "   ");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(text_of(&h, ids[5]).as_deref(), Some("Ricontrollare i dati di ottobre prima della relazione."));
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    // Remove from the menu, and Undo brings it back with its connections.
+    let at = card(&h, "Picture: Grafico dei tassi").rect().center();
+    card(&h, "Picture: Grafico dei tassi").click_secondary();
+    h.run_steps(3);
+    menu_item(&h, "Remove node", at).click();
+    h.run_steps(3);
+    assert!(h.state().maps.graph.node(ids[6]).is_none());
+    assert_eq!(h.state().maps.graph.edges().len(), edges - 1);
+    h.state_mut().maps.picked = None;
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    h.run_steps(3);
+    assert!(h.state().maps.graph.node(ids[6]).is_some(), "Undo brings it back");
+    assert_eq!(h.state().maps.graph.edges().len(), edges);
+}
+
+#[test]
+fn nodes_are_edited_and_removed_from_the_graph_beside_the_document_and_in_its_window() {
+    let (mut h, ids) = harness("nodes_are_edited_and_bes", true, None);
+    // The node's menu in the graph: Edit shows the editor in the panel under it.
+    let at = node(&h, "Politica monetaria").rect().center();
+    node(&h, "Politica monetaria").click_secondary();
+    h.run_steps(3);
+    menu_item(&h, "Edit", at).click();
+    h.run_steps(3);
+    assert!(h.state().maps.editing.as_ref().is_some_and(|e| e.id == ids[4]));
+    field(&h, "Politica monetaria");
+    shot(&mut h, "panel-edit.png");
+    retype(&mut h, "Politica monetaria europea");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(text_of(&h, ids[4]).as_deref(), Some("Politica monetaria europea"), "Enter saves a concept's name");
+    // The keyboard: E edits the node under the cursor, Delete removes it.
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::E);
+    h.run_steps(3);
+    while h.state().maps.graph_cursor() != Some(ids[3]) {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(1);
+    }
+    h.key_press(egui::Key::E);
+    h.run_steps(3);
+    assert!(h.state().maps.editing.as_ref().is_some_and(|e| e.id == ids[3]), "E edits the cursor's node");
+    retype(&mut h, "Non trovato");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(text_of(&h, ids[3]).as_deref(), Some("Non trovato"), "⌘↩ saves a snippet's text");
+    assert!(h.state().maps.graph.node(ids[3]).is_some_and(|n| n.anchor.is_some()), "its source stays");
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::E);
+    h.run_steps(3);
+    while h.state().maps.graph_cursor() != Some(ids[3]) {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(1);
+    }
+    h.key_press(egui::Key::Delete);
+    h.run_steps(3);
+    assert!(h.state().maps.graph.node(ids[3]).is_none(), "Delete removes the cursor's node");
+    // The panel's Undo brings it back.
+    h.get_by(|n| n.role() == Role::Button && n.label().as_deref() == Some("Undo")).click();
+    h.run_steps(3);
+    assert!(h.state().maps.graph.node(ids[3]).is_some());
+    // In the map's own window: its menu edits there, beside its graph.
+    assert!(h.state_mut().execute("map.window"));
+    h.run_steps(4);
+    let frame = h.get_by_label("Map graph in its window").rect();
+    let in_window = h.get_by(|n| {
+        n.role() == Role::Button
+            && n.label().as_deref() == Some("Il calo ha sorpreso")
+            && n.bounding_box().is_some_and(|b| frame.contains(egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32)))
+    });
+    let at = in_window.rect().center();
+    in_window.click_secondary();
+    h.run_steps(3);
+    menu_item(&h, "Edit", at).click();
+    h.run_steps(3);
+    assert!(h.state().maps.editing.as_ref().is_some_and(|e| e.id == ids[2] && e.place == pdfcraft_ui_egui::MapEditIn::Window));
+    retype(&mut h, "Il calo ha sorpreso gli analisti");
+    h.get_by_label("Save").click();
+    h.run_steps(3);
+    assert_eq!(text_of(&h, ids[2]).as_deref(), Some("Il calo ha sorpreso gli analisti"));
 }

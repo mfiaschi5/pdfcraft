@@ -433,6 +433,15 @@ fn concept_maps_are_built_shown_tidied_and_exported() {
     let imported = ok(&mut a, "graph_import", json!({"canvas": "study.canvas", "map": "copy.pdfmap.json"}));
     assert_eq!(imported["map"]["nodes"].as_array().map(Vec::len), Some(2));
     assert_eq!(imported["map"]["connections"][0]["kind"], "is an example of");
+    // A node's text is edited, keeping what it is and its connections.
+    let edited = ok(&mut a, "graph_set_text", json!({"map": "study.pdfmap.json", "node": concept, "text": "  Flight and gliding "}));
+    assert_eq!(edited["text"], "Flight and gliding");
+    let shown = ok(&mut a, "graph_show", json!({"map": "study.pdfmap.json"}));
+    let node = shown["nodes"].as_array().unwrap().iter().find(|n| n["id"] == concept).cloned().unwrap();
+    assert_eq!((node["type"].as_str(), node["text"].as_str()), (Some("concept"), Some("Flight and gliding")), "{node}");
+    assert_eq!(shown["connections"].as_array().map(Vec::len), Some(2));
+    assert!(a.call("graph_set_text", &json!({"map": "study.pdfmap.json", "node": concept, "text": "  "})).is_err(), "nothing to say");
+    assert!(a.call("graph_set_text", &json!({"map": "study.pdfmap.json", "node": 999, "text": "x"})).is_err(), "no such node");
     ok(&mut a, "graph_remove", json!({"map": "study.pdfmap.json", "node": concept}));
     assert_eq!(ok(&mut a, "graph_show", json!({"map": "study.pdfmap.json"}))["connections"].as_array().map(Vec::len), Some(0));
     let _ = std::fs::remove_dir_all(&dir);
