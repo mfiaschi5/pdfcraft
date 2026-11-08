@@ -1,5 +1,5 @@
-//! Google Drive for desktop's folders on this computer. PdfCraft never talks to Google: it saves
-//! into the folders Drive for desktop keeps in sync, and Drive uploads them. No sign-in, no
+//! Google Drive for desktop's folders on this computer. PdfCraft never talks to Google: it opens
+//! and saves in the folders Drive for desktop keeps in sync, and Drive uploads them. No sign-in, no
 //! network code, and it works offline.
 //!
 //! - **macOS:** one folder per account, `~/Library/CloudStorage/GoogleDrive-<account>`, holding
@@ -10,8 +10,10 @@
 //!   isn't in the path. Not yet tried on a Windows machine.
 //! - **Linux:** there is no Drive for desktop.
 //!
-//! Listing is bounded ([`MAX_SCANNED`], [`MAX_FOLDERS`]) and names typed by the user are checked
-//! ([`check_name`]) before anything is created, so a name can't climb out of the folder chosen.
+//! Listing is bounded ([`MAX_SCANNED`], [`MAX_FOLDERS`], [`MAX_FILES`]) and names typed by the
+//! user are checked ([`check_name`]) before anything is made or renamed, so a name can't climb out
+//! of the folder chosen. A document opened from these folders is an ordinary file: saving it
+//! writes the synced copy, and Drive uploads that.
 
 use std::path::{Path, PathBuf};
 
@@ -19,6 +21,8 @@ use std::path::{Path, PathBuf};
 pub const MAX_SCANNED: usize = 50_000;
 /// Folders returned from one folder.
 pub const MAX_FOLDERS: usize = 5_000;
+/// PDFs returned from one folder.
+pub const MAX_FILES: usize = 5_000;
 /// Accounts looked at.
 pub const MAX_ACCOUNTS: usize = 32;
 /// Longest file or folder name, in bytes (the limit of the file systems Drive syncs to).
@@ -101,29 +105,118 @@ pub fn my_drive(places: &[String]) -> Option<&str> {
     places.iter().find(|p| MY_DRIVE.contains(&p.as_str())).map(String::as_str)
 }
 
+/// A folder, or a PDF, in a Drive folder.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub name: String,
+    /// A folder, or a link to one; else a PDF.
+    pub folder: bool,
+    /// The PDF's size in bytes (0 for a folder).
+    pub size: u64,
+    pub modified: Option<std::time::SystemTime>,
+}
+
 /// The folders in `dir`, sorted by name, without hidden ones or names that aren't Unicode.
 pub fn folders(dir: &Path) -> Result<Vec<String>, ListError> {
-    let entries = std::fs::read_dir(dir).map_err(|e| list_error(&e))?;
-    let mut out: Vec<String> = Vec::new();
-    for entry in entries.take(MAX_SCANNED) {
+    Ok(entries(dir)?.into_iter().filter(|e| e.folder).map(|e| e.name).collect())
+}
+
+/// The folders in `dir`, then its PDFs, each sorted by name, without hidden ones or names that
+/// aren't Unicode. At most [`MAX_FOLDERS`] folders and [`MAX_FILES`] PDFs. A PDF Drive keeps
+/// online only is listed like any other: Drive downloads it when it is read.
+pub fn entries(dir: &Path) -> Result<Vec<Entry>, ListError> {
+    let list = std::fs::read_dir(dir).map_err(|e| list_error(&e))?;
+    let (mut folders, mut files) = (Vec::new(), Vec::new());
+    for entry in list.take(MAX_SCANNED) {
         let Ok(entry) = entry else { continue };
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else { continue };
         if name.starts_with('.') {
             continue;
         }
-        // A shortcut or link counts when what it points to is a folder.
-        let is_dir = match entry.file_type() {
-            Ok(t) if t.is_symlink() => entry.path().is_dir(),
-            Ok(t) => t.is_dir(),
-            Err(_) => false,
+        let Ok(kind) = entry.file_type() else { continue };
+        // Only what is listed is looked at further: a folder needs no more, a PDF its size.
+        let meta = if kind.is_dir() {
+            None
+        } else if kind.is_symlink() || (kind.is_file() && is_pdf(&name)) {
+            // A shortcut or link counts as what it points to.
+            match std::fs::metadata(entry.path()) {
+                Ok(m) => Some(m),
+                Err(_) => continue,
+            }
+        } else {
+            continue;
         };
-        if is_dir {
-            out.push(name);
+        match meta {
+            None => folders.push(Entry { name, folder: true, size: 0, modified: None }),
+            Some(m) if m.is_dir() => folders.push(Entry { name, folder: true, size: 0, modified: m.modified().ok() }),
+            Some(m) if m.is_file() && is_pdf(&name) => files.push(Entry { name, folder: false, size: m.len(), modified: m.modified().ok() }),
+            Some(_) => {}
         }
     }
-    out.sort_by_cached_key(|n| n.to_lowercase());
-    out.truncate(MAX_FOLDERS);
-    Ok(out)
+    folders.sort_by_cached_key(|e| e.name.to_lowercase());
+    folders.truncate(MAX_FOLDERS);
+    files.sort_by_cached_key(|e| e.name.to_lowercase());
+    files.truncate(MAX_FILES);
+    folders.append(&mut files);
+    Ok(folders)
+}
+
+/// Whether `name` is a PDF's, by its extension.
+pub fn is_pdf(name: &str) -> bool {
+    Path::new(name).extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+}
+
+/// Where a path is in Google Drive.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Place {
+    /// Which of the accounts given.
+    pub account: usize,
+    /// The names from the account's folder down to the path, its place (My Drive …) first.
+    pub parts: Vec<String>,
+}
+
+/// Where `path` is in one of `accounts`, if it is in one: the first whose folder holds it. A
+/// path that climbs (`..`) or whose names aren't Unicode isn't placed.
+pub fn place(path: &Path, accounts: &[Account]) -> Option<Place> {
+    accounts.iter().enumerate().find_map(|(account, a)| {
+        let rest = path.strip_prefix(&a.root).ok()?;
+        let parts = rest
+            .components()
+            .map(|c| match c {
+                std::path::Component::Normal(n) => n.to_str().map(str::to_owned),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Place { account, parts })
+    })
+}
+
+/// Rename the file or folder at `path` to `name`, in the same folder, and return its new path. A
+/// PDF keeps its `.pdf` extension. Refused when something of that name is there already, except
+/// the file itself under another case. That is checked just before renaming, and the system's
+/// rename would replace a file made in between.
+pub fn rename(path: &Path, name: &str) -> Result<PathBuf, NameError> {
+    let (Some(parent), Some(old)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else {
+        return Err(NameError::Other("not a file in a folder".into()));
+    };
+    let name = if path.is_file() && is_pdf(old) { pdf_name(name)? } else { check_name(name)?.to_owned() };
+    if name == old {
+        return Ok(path.to_path_buf());
+    }
+    let dest = parent.join(&name);
+    // The exact name taken, or another name the file system takes as the same (case, Unicode
+    // normalization) that isn't just this file in another case.
+    let exact = std::fs::read_dir(parent)
+        .map_err(|e| NameError::Other(e.to_string()))?
+        .take(MAX_SCANNED)
+        .filter_map(Result::ok)
+        .any(|e| e.file_name().to_str() == Some(name.as_str()));
+    let same = dest.symlink_metadata().is_ok() && !name.to_lowercase().eq(&old.to_lowercase());
+    if exact || same {
+        return Err(NameError::Exists);
+    }
+    std::fs::rename(path, &dest).map_err(|e| NameError::Other(e.to_string()))?;
+    Ok(dest)
 }
 
 fn list_error(e: &std::io::Error) -> ListError {

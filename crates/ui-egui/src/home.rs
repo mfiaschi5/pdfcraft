@@ -72,6 +72,27 @@ fn tool_card(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static c
 }
 
 /// Draw the Home page with the welcome text, community card and recent documents.
+/// A card that does one thing, like Open file: an icon over its label.
+#[cfg(not(target_arch = "wasm32"))]
+fn action_card(ui: &mut egui::Ui, t: &Tokens, icon: &str, label: &str) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 104.0), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+    let press = theme::Press::track(ui, &resp);
+    card_lift(ui, t, rect, press);
+    ui.painter().rect(
+        rect,
+        CornerRadius::same(10),
+        press.fill(t.pasteboard, t.hover, t.pressed),
+        Stroke::new(1.0, t.divider),
+        egui::StrokeKind::Inside,
+    );
+    let body = rect.translate(press.offset());
+    icons::paint(ui, Rect::from_center_size(body.center() - vec2(0.0, 16.0), vec2(28.0, 28.0)), icon, 26.0, t.icon);
+    let text = ui.painter().layout(label.to_owned(), theme::semibold(13.0), t.text, rect.width() - 16.0);
+    ui.painter().galley(body.center() + vec2(-text.size().x / 2.0, 22.0 - text.size().y / 2.0), text, t.text);
+    theme::hand(resp)
+}
+
 pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -146,6 +167,11 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         ui.painter().text(body.center() + vec2(0.0, 22.0), Align2::CENTER_CENTER, tl!("Open file"), theme::semibold(13.0), t.text);
                         if theme::hand(resp).clicked() {
                             app.open_dialog();
+                        }
+                        // Google Drive for desktop's folders: the desktop app's.
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if action_card(ui, &t, "cloud", tl!("Open from Google Drive")).clicked() {
+                            app.execute("file.open_from_drive");
                         }
                     });
                 });

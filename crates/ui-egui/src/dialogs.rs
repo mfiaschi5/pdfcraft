@@ -70,6 +70,9 @@ struct Pending {
     /// Where Save to Google Drive chose to save.
     #[cfg(not(target_arch = "wasm32"))]
     drive: Option<crate::drive_ui::Chosen>,
+    /// What Open from Google Drive chose to open.
+    #[cfg(not(target_arch = "wasm32"))]
+    drive_open: Option<crate::drive_ui::Opened>,
     close: bool,
     /// The dialog to switch to, when a widget asked for another one.
     next: Option<Dialog>,
@@ -104,6 +107,10 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     #[cfg(not(target_arch = "wasm32"))]
     if app.dialog != Some(Dialog::SaveToDrive) {
         app.drive.draft = None;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if app.dialog != Some(Dialog::OpenFromDrive) {
+        app.drive.open = None;
     }
     // A movable window, not this modal: the page under it shows the table as it changes.
     if app.dialog == Some(Dialog::FieldTable) {
@@ -163,9 +170,14 @@ fn dialog_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, dialog: Dialog, req: &m
             (req.drive, req.close) = crate::drive_ui::body(ui, app);
             return false;
         }
-        // The web app has no Drive for desktop; its command never opens this.
+        #[cfg(not(target_arch = "wasm32"))]
+        Dialog::OpenFromDrive => {
+            (req.drive_open, req.close) = crate::drive_ui::open_body(ui, app);
+            return false;
+        }
+        // The web app has no Drive for desktop; its commands never open these.
         #[cfg(target_arch = "wasm32")]
-        Dialog::SaveToDrive => {
+        Dialog::SaveToDrive | Dialog::OpenFromDrive => {
             req.close = true;
             return false;
         }
@@ -2014,6 +2026,10 @@ fn finish_close(app: &mut PdfCraftApp, dialog: Dialog, modal_closed: bool, req: 
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(chosen) = req.drive.take() {
         app.finish_save_to_drive(chosen);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(opened) = req.drive_open.take() {
+        app.finish_open_from_drive(opened);
     }
     if req.stamp_now {
         app.save_custom_stamp();

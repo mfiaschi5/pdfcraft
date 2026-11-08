@@ -1,4 +1,4 @@
-# Italiano (it): this fork's own rows, for the AI assistant and concept maps (M13).
+# Italiano (it): this fork's own rows, for the AI assistant, concept maps, the wiki and Google Drive (M13).
 # Same columns and escapes as craft-i18n's locales/it/pdfcraft.tsv: context <TAB> English <TAB> translation.
 # crates/ui-egui/build.rs adds each row the pinned craft-i18n checkout lacks (by context and English) to
 # the Italian PdfCraft catalog; a row craft-i18n already has keeps craft-i18n's translation.
@@ -345,3 +345,24 @@ key	Enter	Invio
 	Right-click	Clic destro
 	Edit, open or remove the node	Modifica, apri o rimuovi il nodo
 	Edit node	Modifica del nodo
+# Google Drive: Open from Google Drive and the Google Drive panel.
+	Open from Google Drive	Apri da Google Drive
+	Open from Google Drive…	Apri da Google Drive…
+	Opening from Google Drive needs the desktop app, with Google Drive for desktop.	L'apertura da Google Drive richiede l'app desktop e Google Drive per desktop.
+	Google Drive needs the desktop app, with Google Drive for desktop.	Google Drive richiede l'app desktop e Google Drive per desktop.
+	Click a PDF to open it. Saving it writes the copy in Drive, and Google Drive for desktop uploads it.	Fai clic su un PDF per aprirlo. Quando lo salvi viene scritta la copia in Drive, e Google Drive per desktop la carica.
+	This folder is empty	Questa cartella è vuota
+	More for {name}	Altro per {name}
+	Pin to Home	Fissa sulla Home
+	{name} is the document shown	{name} è il documento visualizzato
+	In Google Drive	Su Google Drive
+	Save ({key}) updates it there, and Google Drive for desktop uploads the change.	Salva ({key}) lo aggiorna lì, e Google Drive per desktop carica la modifica.
+	Go to its folder	Vai alla sua cartella
+	This document isn't in Google Drive.	Questo documento non è su Google Drive.
+	Open a PDF below to work on it in Drive, or save this one in a folder.	Apri un PDF qui sotto per lavorarci su Drive, oppure salva questo in una cartella.
+	Rename {name}	Rinomina {name}
+	New name	Nuovo nome
+	{name} is open in PdfCraft. Close it first, then rename it.	{name} è aperto in PdfCraft. Chiudilo prima di rinominarlo.
+	There is already something with that name here.	Qui c'è già un elemento con questo nome.
+	Couldn't rename it: {e}	Impossibile rinominarlo: {e}
+	Save in this folder…	Salva in questa cartella…

@@ -75,6 +75,7 @@ impl PdfCraftApp {
                     "assistant" => Some(RightPanel::Assistant),
                     "map" => Some(RightPanel::Map),
                     "wiki" => Some(RightPanel::Wiki),
+                    "drive" => Some(RightPanel::Drive),
                     "none" => None,
                     other => return Err(format!("unknown panel {other}")),
                 }
@@ -122,6 +123,7 @@ impl PdfCraftApp {
                     "export-image" => Some(Dialog::Export(export_ui::ExportKind::Image)),
                     "word-count" => Some(Dialog::WordCount),
                     "save-to-drive" => Some(Dialog::SaveToDrive),
+                    "open-from-drive" => Some(Dialog::OpenFromDrive),
                     "export-text" => Some(Dialog::Export(export_ui::ExportKind::Text)),
                     "export-all-images" => Some(Dialog::Export(export_ui::ExportKind::AllImages)),
                     "accessibility-options" => Some(Dialog::AccessibilityOptions),

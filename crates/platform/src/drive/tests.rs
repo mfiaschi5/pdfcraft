@@ -94,3 +94,72 @@ fn a_new_folder_is_made_inside_the_one_chosen() {
     assert!(!d.parent().unwrap().join("escape").exists());
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[test]
+fn a_folder_lists_its_folders_then_its_pdfs_with_their_sizes() {
+    let d = dir("entries");
+    for f in ["Zeta", "alpha", ".hidden"] {
+        std::fs::create_dir(d.join(f)).unwrap();
+    }
+    for (f, bytes) in [("b.pdf", &b"%PDF-1.7 b"[..]), ("A.PDF", b"%PDF"), ("notes.txt", b"x"), (".secret.pdf", b"%PDF")] {
+        std::fs::write(d.join(f), bytes).unwrap();
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(d.join("b.pdf"), d.join("link.pdf")).unwrap();
+    let got = entries(&d).unwrap();
+    let names: Vec<(&str, bool)> = got.iter().map(|e| (e.name.as_str(), e.folder)).collect();
+    let mut want = vec![("alpha", true), ("Zeta", true), ("A.PDF", false), ("b.pdf", false)];
+    if cfg!(unix) {
+        want.push(("link.pdf", false));
+    }
+    assert_eq!(names, want, "folders first, then PDFs, by name; no other files or hidden ones");
+    let b = got.iter().find(|e| e.name == "b.pdf").unwrap();
+    assert_eq!(b.size, 10);
+    assert!(b.modified.is_some());
+    assert_eq!(entries(&d.join("gone")), Err(ListError::Missing));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn a_path_is_placed_in_the_account_whose_folder_holds_it() {
+    let a = Account { name: "a@example.com".into(), root: PathBuf::from("/h/Library/CloudStorage/GoogleDrive-a@example.com") };
+    let b = Account { name: "b@example.com".into(), root: PathBuf::from("/h/Library/CloudStorage/GoogleDrive-b@example.com") };
+    let accounts = [a.clone(), b.clone()];
+    assert_eq!(
+        place(&b.root.join("My Drive/Papers/x.pdf"), &accounts),
+        Some(Place { account: 1, parts: vec!["My Drive".into(), "Papers".into(), "x.pdf".into()] })
+    );
+    assert_eq!(place(&a.root, &accounts), Some(Place { account: 0, parts: Vec::new() }));
+    assert_eq!(place(Path::new("/h/Documents/x.pdf"), &accounts), None);
+    assert_eq!(place(&a.root.join("My Drive/../../x.pdf"), &accounts), None, "a path that climbs isn't placed");
+    assert_eq!(place(Path::new("/h/Library/CloudStorage/GoogleDrive-a@example.com2/x.pdf"), &accounts), None, "by whole names");
+}
+
+#[test]
+fn a_file_is_renamed_in_its_folder_and_keeps_being_a_pdf() {
+    let d = dir("rename");
+    let file = d.join("draft.pdf");
+    std::fs::write(&file, b"%PDF").unwrap();
+    std::fs::write(d.join("taken.pdf"), b"%PDF").unwrap();
+    std::fs::create_dir(d.join("Folder")).unwrap();
+    let renamed = rename(&file, " Final ").unwrap();
+    assert_eq!(renamed, d.join("Final.pdf"));
+    assert!(renamed.is_file() && !file.exists());
+    assert_eq!(rename(&renamed, "taken"), Err(NameError::Exists));
+    assert_eq!(rename(&renamed, "../up"), Err(NameError::Character('/')));
+    assert_eq!(rename(&renamed, ".hidden"), Err(NameError::Reserved));
+    assert!(renamed.is_file(), "a refused name leaves the file as it was");
+    assert_eq!(rename(&renamed, "Final.pdf").unwrap(), renamed, "the same name is no change");
+    // Only the case changes: the file itself, never another one.
+    let upper = rename(&renamed, "FINAL").unwrap();
+    assert_eq!(upper, d.join("FINAL.pdf"));
+    assert_eq!(
+        std::fs::read_dir(&d).unwrap().filter_map(Result::ok).filter(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case("final.pdf")).count(),
+        1
+    );
+    // A folder takes the name as typed.
+    let folder = rename(&d.join("Folder"), "Archive 2026").unwrap();
+    assert_eq!(folder, d.join("Archive 2026"));
+    assert!(folder.is_dir());
+    let _ = std::fs::remove_dir_all(&d);
+}
