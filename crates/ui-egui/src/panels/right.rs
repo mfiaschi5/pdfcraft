@@ -51,6 +51,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let has_claude_code = app.ai_service.as_ref().is_some_and(|s| s.claude_code.is_some());
     let mut bm_rename = app.bookmark_rename.clone();
     let bm_editable = app.session.get(id).is_some_and(|d| d.allows_assembly() && d.read_only_reason.is_none());
+    let bm_can_paste = app.bookmark_clipboard.is_some();
     // Prepare a form is open: the Fields panel orders tabs.
     let preparing = app.is_preparing();
     {
@@ -144,6 +145,10 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     bm_action = Some(BmAction::FromTextStyles);
                                     ui.close();
                                 }
+                                if bm_editable && ui.add_enabled(bm_can_paste, egui::Button::new(tl!("Paste bookmarks"))).clicked() {
+                                    bm_action = Some(BmAction::Paste { parent: Vec::new(), index: usize::MAX });
+                                    ui.close();
+                                }
                                 if !info.outline.is_empty() {
                                     for (levels, label) in [
                                         (usize::MAX, tl!("Expand all bookmarks")),
@@ -228,6 +233,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             action: &mut bm_action,
                             rename: &mut bm_rename,
                             editable: bm_editable,
+                            can_paste: bm_can_paste,
                             current: view.current,
                             expand: bm_expand,
                             matches: &bookmark_matches,
