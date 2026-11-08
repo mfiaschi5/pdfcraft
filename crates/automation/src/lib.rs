@@ -29,6 +29,8 @@ mod maps;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 mod measure;
+mod model3d;
+mod model_render;
 mod printing;
 mod reading;
 mod redact;
@@ -53,6 +55,7 @@ use file_access::foreign_share;
 use text_cache::TextCache;
 
 mod assemble;
+mod bookmark_io;
 mod dispatch;
 mod documents;
 mod error;
@@ -76,6 +79,12 @@ pub(crate) use paths::{read_input, read_input_bytes};
 #[cfg(test)]
 use paths::{write_atomic_synced, write_atomic_with};
 
+struct OcrReview {
+    handle: u64,
+    guard: pdfcraft_engine::ocr::OcrGuard,
+    pages: Vec<pdfcraft_engine::ocr::OcrPage>,
+}
+
 /// A headless PdfCraft session driven by tool calls.
 pub struct Automation {
     session: Session,
@@ -92,6 +101,9 @@ pub struct Automation {
     /// Documents that lost a listing to the cap. A page of one with no listing is refused rather
     /// than read as "a number is a position", which the page may no longer match.
     evicted: HashSet<DocId>,
+    /// Review sessions held for `ocr_words` (a guard and the pages read), by document.
+    ocr_reviews: HashMap<DocId, OcrReview>,
+    next_ocr_review: u64,
     /// The AI assistant's library, once a tool has used it.
     ai: Option<assistant::Loaded>,
     /// What `ai_ask` sends with, when the app allowed the network ([`Automation::with_ai_network`]).
@@ -114,6 +126,8 @@ impl Automation {
             texts: TextCache::default(),
             listed: HashMap::new(),
             evicted: HashSet::new(),
+            ocr_reviews: HashMap::new(),
+            next_ocr_review: 0,
             ai: None,
             ai_network: None,
         }

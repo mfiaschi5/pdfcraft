@@ -352,6 +352,21 @@ fn zoom_shortcuts(view: &mut DocView, pressed: &impl Fn(egui::KeyboardShortcut) 
     }
 }
 
+/// Escape on the page: it cancels the camera clean-up, else clears the selection, else the mark of
+/// a concept map's passage, else closes find.
+fn escape(view: &mut DocView) {
+    if view.camera.is_some() || view.camera_done.is_some() {
+        view.pending_action = Some(ViewAction::CancelCamera);
+    } else if view.selection.is_some() || view.all_text {
+        view.selection = None;
+        view.all_text = false;
+    } else if view.node_mark.is_some() {
+        view.node_mark = None;
+    } else {
+        view.find = None;
+    }
+}
+
 pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_speed::ScrollSpeed) {
     use egui::{Key, KeyboardShortcut, Modifiers};
     if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::F))) {
@@ -398,16 +413,7 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
     let key = |k| (arrows || !matches!(k, Key::ArrowLeft | Key::ArrowRight | Key::ArrowUp | Key::ArrowDown)) && ctx.input(|i| i.key_pressed(k));
     // An open menu takes Escape first and closes; the selection stays for the next one (#3535).
     if key(Key::Escape) && !egui::Popup::is_any_open(ctx) {
-        if view.camera.is_some() || view.camera_done.is_some() {
-            view.pending_action = Some(ViewAction::CancelCamera);
-        } else if view.selection.is_some() || view.all_text {
-            view.selection = None;
-            view.all_text = false;
-        } else if view.node_mark.is_some() {
-            view.node_mark = None;
-        } else {
-            view.find = None;
-        }
+        escape(view);
     }
     if key(Key::Home) {
         view.go_to_page(0);
@@ -426,14 +432,39 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
         }
     }
     // As in Acrobat: → / ← go to the next / previous page in every layout (#185), and so do
-    // ⌘Page Down / ⌘Page Up, or plain Page Down / Page Up in single-page view.
+    // ⌘Page Down / ⌘Page Up, or plain Page Down / Page Up in single-page view. On a page wider
+    // than the window (a plan zoomed in) → / ← scroll sideways a line first, and turn the page
+    // once there is nothing left to scroll that way, as ↓ / ↑ do in single-page view; ⌘→ / ⌘←
+    // turn it at once.
     let command = ctx.input(|i| i.modifiers.command);
     let scrolls = view.continuous;
-    if key(Key::ArrowRight) || (key(Key::PageDown) && (command || !scrolls)) {
+    let line = KEY_SCROLL_LINE * speed.factor();
+    // Only an up-to-date view counts: no jump pending.
+    let sideways = |view: &DocView, right: bool| {
+        !command && view.goto.is_none() && view.side_edges.is_some_and(|(left_edge, right_edge)| !if right { right_edge } else { left_edge })
+    };
+    // Turned at an edge, the next page starts at its left and the previous one at its right, as
+    // reading on across: on two wide pages → doesn't turn twice without showing the next one's left.
+    let at_edge = |view: &mut DocView, right: bool| {
+        if !command && view.goto.is_some() {
+            view.goto_side = Some(!right);
+        }
+    };
+    if key(Key::ArrowRight) && sideways(view, true) {
+        view.key_side += line;
+    } else if key(Key::ArrowRight) || (key(Key::PageDown) && (command || !scrolls)) {
         view.step_page(true);
+        if key(Key::ArrowRight) {
+            at_edge(view, true);
+        }
     }
-    if key(Key::ArrowLeft) || (key(Key::PageUp) && (command || !scrolls)) {
+    if key(Key::ArrowLeft) && sideways(view, false) {
+        view.key_side -= line;
+    } else if key(Key::ArrowLeft) || (key(Key::PageUp) && (command || !scrolls)) {
         view.step_page(false);
+        if key(Key::ArrowLeft) {
+            at_edge(view, false);
+        }
     }
     // ↓ / ↑ scroll a line, and Page Down / Page Up a screen where the pages scroll. In
     // single-page view, ↓ / ↑ turn the page once there is nothing left to scroll that way, as
@@ -441,7 +472,6 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
     // The Scroll speed preference sets how far ↓ / ↑ go as well as the wheel (#985); Page Down /
     // Page Up keep a screen.
     if !command {
-        let line = KEY_SCROLL_LINE * speed.factor();
         let screen = (view.viewport_h - KEY_SCROLL_LINE).max(KEY_SCROLL_LINE);
         let steps = [(Key::ArrowDown, line), (Key::ArrowUp, -line), (Key::PageDown, screen), (Key::PageUp, -screen)];
         for (k, by) in steps {

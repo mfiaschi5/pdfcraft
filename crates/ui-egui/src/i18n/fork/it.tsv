@@ -1,0 +1,347 @@
+# Italiano (it): this fork's own rows, for the AI assistant and concept maps (M13).
+# Same columns and escapes as craft-i18n's locales/it/pdfcraft.tsv: context <TAB> English <TAB> translation.
+# crates/ui-egui/build.rs adds each row the pinned craft-i18n checkout lacks (by context and English) to
+# the Italian PdfCraft catalog; a row craft-i18n already has keeps craft-i18n's translation.
+# Lines starting with # and blank lines are ignored.
+#
+# Clean room: written from the plain meaning of the English text; AI-assisted, not separately
+# native-reviewed.
+key	Enter	Invio
+	Ask AI	Chiedi all'IA
+	Add to map	Aggiungi alla mappa
+	Add Image to Map	Aggiungi immagine alla mappa
+	Go back to the document first.	Torna prima al documento.
+	The AI assistant needs the desktop app.	L'assistente IA richiede l'app desktop.
+	Turn on the AI assistant	Attiva l'assistente IA
+	Off by default. When it is on, a question you ask sends the passages it is about to Anthropic. Nothing is ever sent in the background.	Disattivato per impostazione predefinita. Quando è attivo, ogni domanda che fai invia ad Anthropic i passaggi a cui si riferisce. Non viene mai inviato nulla in background.
+	Effort	Impegno
+	Medium (default)	Medio (predefinito)
+	Extra high	Molto alto
+	Show what will be sent before each question	Mostra cosa verrà inviato prima di ogni domanda
+	Let the assistant search the web (billed per search)	Consenti all'assistente di cercare sul web (addebitato per ricerca)
+	API key	Chiave API
+	A key is saved in the keychain.	Una chiave è salvata nel portachiavi.
+	A key is kept for this session only.	Una chiave è conservata solo per questa sessione.
+	Using the key in ANTHROPIC_API_KEY.	Viene usata la chiave in ANTHROPIC_API_KEY.
+	No key yet.	Nessuna chiave.
+	Save key	Salva chiave
+	Remove key	Rimuovi chiave
+	The assistant's answer cites this address. Open it in your browser?	La risposta dell'assistente cita questo indirizzo. Aprirlo nel browser?
+	The AI assistant is off. Nothing is sent anywhere until you turn it on.	L'assistente IA è disattivato. Non viene inviato nulla finché non lo attivi.
+	Turn on in Preferences…	Attiva nelle Preferenze…
+	No API key yet: add one in Preferences ▸ AI assistant.	Nessuna chiave API: aggiungine una in Preferenze > Assistente IA.
+	Clear conversation	Cancella conversazione
+	About: {what}	Riguardo a: {what}
+	Ask about the current page instead	Chiedi invece della pagina corrente
+	About: the selection, or the current page	Riguardo a: la selezione, o la pagina corrente
+	Explain this in simple terms.	Spiegalo in parole semplici.
+	Summarize this.	Riassumilo.
+	Translate this into English.	Traducilo in inglese.
+	Ask a question about this document	Fai una domanda su questo documento
+	Stop	Interrompi
+	Ask	Chiedi
+	Library	Biblioteca
+	Add this document to the library	Aggiungi questo documento alla biblioteca
+	Remove from the library	Rimuovi dalla biblioteca
+	The library is empty. Answers can cite the documents you add.	La biblioteca è vuota. Le risposte possono citare i documenti che aggiungi.
+	Searched the web for “{query}”	Cercato sul web: “{query}”
+	Answering…	Risposta in corso…
+	Stopped.	Interrotta.
+	The answer was cut off at its length limit.	La risposta è stata troncata al limite di lunghezza.
+	The model declined to answer.	Il modello ha rifiutato di rispondere.
+	{tokens} tokens · about {cost}	{tokens} token · circa {cost}
+	Save as comment	Salva come commento
+	Page {n}	Pagina {n}
+	Library document, page {n}	Documento della biblioteca, pagina {n}
+	This will be sent	Verrà inviato questo
+	To {model}, about {what}:	A {model}, riguardo a {what}:
+	Question: {q}	Domanda: {q}
+	Text under redaction marks is left out.	Il testo sotto i segni di redazione è escluso.
+	This document is password-protected.	Questo documento è protetto da password.
+	About {n} tokens	Circa {n} token
+	Send	Invia
+	Send to Anthropic?	Inviare ad Anthropic?
+	Your question, and the text from this document and your library that it is about, will be sent to Anthropic to answer it with {model}. Requests are billed to your API key.	La tua domanda, insieme al testo di questo documento e della tua biblioteca a cui si riferisce, verrà inviata ad Anthropic per ottenere una risposta da {model}. Le richieste sono addebitate alla tua chiave API.
+	Anthropic's privacy policy	Informativa sulla privacy di Anthropic
+	Allow and send	Consenti e invia
+	the selection on page {n} ({words} words)	la selezione a pagina {n} ({words} parole)
+	API key saved	Chiave API salvata
+	Couldn't save the key: {e}	Impossibile salvare la chiave: {e}
+	Couldn't remove the key: {e}	Impossibile rimuovere la chiave: {e}
+	The library file couldn't be read: {e}	Impossibile leggere il file della biblioteca: {e}
+	The library file couldn't be read, so it was left as it is. Move it away to start a new one.	Il file della biblioteca non è leggibile ed è stato lasciato com'è. Spostalo altrove per iniziarne uno nuovo.
+	Couldn't save the library: {e}	Impossibile salvare la biblioteca: {e}
+	the selection on page {n}	la selezione a pagina {n}
+	page {n}	pagina {n}
+	Wait for the current answer, or stop it.	Attendi la risposta in corso, oppure interrompila.
+	The request stopped unexpectedly.	La richiesta si è interrotta inaspettatamente.
+	That document is no longer in the library.	Quel documento non è più nella biblioteca.
+	{path} isn't there any more. Add the file to the library again from where it is now.	{path} non c'è più. Aggiungi di nuovo il file alla biblioteca dalla sua posizione attuale.
+	Opening library documents needs the desktop app	Per aprire i documenti della biblioteca serve l'app desktop
+	The file changed since it was added to the library; the cited page may be different. Add it again to update it.	Il file è cambiato da quando è stato aggiunto alla biblioteca; la pagina citata potrebbe essere diversa. Aggiungilo di nuovo per aggiornarlo.
+	library document, page {n}	documento della biblioteca, pagina {n}
+	Sources:	Fonti:
+	Couldn't add it to the library: {e}	Impossibile aggiungerlo alla biblioteca: {e}
+	Added to the library	Aggiunto alla biblioteca
+	{doc}, p. {n}	{doc}, p. {n}
+	Concept map	Mappa concettuale
+	Concept maps need the desktop app	Le mappe concettuali richiedono l'app desktop
+	Couldn't open the map: {e}	Impossibile aprire la mappa: {e}
+	New map	Nuova mappa
+	Couldn't save the map: {e}	Impossibile salvare la mappa: {e}
+	Added to the map “{map}”	Aggiunto alla mappa “{map}”
+	Select some text first.	Seleziona prima del testo.
+	There is no text there to add.	Lì non c'è testo da aggiungere.
+	That picture can't go on a map: it must be a PNG or JPEG file of at most 2 MB.	Questa immagine non può andare su una mappa: deve essere un file PNG o JPEG di al massimo 2 MB.
+	Picture on page {n} of {doc}	Immagine a pagina {n} di {doc}
+	This snippet's document isn't known.	Il documento di questo estratto non è noto.
+	This snippet's document isn't open, and where its file is isn't known.	Il documento di questo estratto non è aperto e non si sa dove si trovi il file.
+	Turn the AI assistant on in Preferences first.	Attiva prima l'assistente IA nelle Preferenze.
+	Ask a first question in the AI assistant panel to allow requests, then try again.	Fai una prima domanda nel pannello Assistente IA per consentire le richieste, poi riprova.
+	The assistant proposed no changes.	L'assistente non ha proposto modifiche.
+	{n} of the kept changes couldn't be applied.	{n} delle modifiche tenute non sono state applicate.
+	Couldn't export the map: {e}	Impossibile esportare la mappa: {e}
+	Undo {what}	Annulla: {what}
+	Tidy up	Riordina
+	New connections:	Nuovi collegamenti:
+	JSON Canvas (Obsidian)	JSON Canvas (Obsidian)
+	GraphML (yEd, Gephi)	GraphML (yEd, Gephi)
+	The assistant's proposal	La proposta dell'assistente
+	A note or a concept	Una nota o un concetto
+	Add note	Aggiungi nota
+	Add concept	Aggiungi concetto
+	For a snippet, select text in a document and choose Add to map, or right-click a picture.	Per un estratto, seleziona del testo in un documento e scegli Aggiungi alla mappa, oppure fai clic destro su un'immagine.
+	Click a node or a connection to see it here. Drag from a node's dot onto another node to connect them.	Fai clic su un nodo o su un collegamento per vederlo qui. Trascina dal punto di un nodo su un altro nodo per collegarli.
+	Ask the assistant	Chiedi all'assistente
+	Show connections	Mostra collegamenti
+	{s} and up	{s} e oltre
+	Kinds of connection	Tipi di collegamento
+	Node	Nodo
+	Added by the assistant	Aggiunto dall'assistente
+	Open {source}	Apri {source}
+	Connections: {n}	Collegamenti: {n}
+	Remove node	Rimuovi nodo
+	Connection	Collegamento
+	Remove connection	Rimuovi collegamento
+	Working on the map…	Lavoro sulla mappa in corso…
+	The AI assistant is off. Turn it on in Preferences ▸ AI assistant.	L'assistente IA è disattivato. Attivalo in Preferenze > Assistente IA.
+	What should change? For example: connect the selected node to related ideas	Cosa deve cambiare? Per esempio: collega il nodo selezionato a idee correlate
+	Extract the key concepts from this page and connect them.	Estrai i concetti chiave da questa pagina e collegali.
+	Connect the selected node to related ideas.	Collega il nodo selezionato a idee correlate.
+	What is missing from this map?	Cosa manca in questa mappa?
+	Only the selected node and what is within two connections of it are sent.	Vengono inviati solo il nodo selezionato e ciò che dista al massimo due collegamenti da esso.
+	Propose changes	Proponi modifiche
+	Nothing has changed yet. Keep the changes you want, then apply them.	Non è ancora cambiato nulla. Tieni le modifiche che vuoi, poi applicale.
+	Add {key}: {text}{source}	Aggiungi {key}: {text}{source}
+	Connect {from} → {to}: {kind}, {strength}	Collega {from} → {to}: {kind}, {strength}
+	Reword {node}: {text}	Riformula {node}: {text}
+	Remove the connection {from} → {to}	Rimuovi il collegamento {from} → {to}
+	Apply {n} changes	Applica {n} modifiche
+	Drag onto another node to connect them	Trascina su un altro nodo per collegarli
+	This map is empty. Add a note, or select text in a document and choose Add to map.	Questa mappa è vuota. Aggiungi una nota, oppure seleziona del testo in un documento e scegli Aggiungi alla mappa.
+	is related to	è correlato a
+	supports	sostiene
+	contradicts	contraddice
+	is an example of	è un esempio di
+	defines	definisce
+	causes	causa
+	is part of	fa parte di
+	comes before	viene prima di
+	see also	vedi anche
+	Add snippet	Aggiungi estratto
+	Add picture	Aggiungi immagine
+	Add node	Aggiungi nodo
+	Move node	Sposta nodo
+	Connect	Collega
+	Change connection	Modifica collegamento
+	Apply the assistant's changes	Applica le modifiche dell'assistente
+	A kind of your own	Un tipo tuo
+	Has a direction	Ha una direzione
+	Add kind	Aggiungi tipo
+	Add kind of connection	Aggiungi tipo di collegamento
+	Export map	Esporta mappa
+	Another map was opened, so the assistant's proposal was dropped.	È stata aperta un'altra mappa, quindi la proposta dell'assistente è stata scartata.
+	Picture: {alt}	Immagine: {alt}
+	Whole map	Mappa intera
+	Show the whole map instead of the document	Mostra la mappa intera al posto del documento
+	Add the selected text to the map ({key})	Aggiungi il testo selezionato alla mappa ({key})
+	Add the selection	Aggiungi la selezione
+	Select text to add it, or right-click a picture.	Seleziona del testo per aggiungerlo, oppure fai clic destro su un'immagine.
+	Add a snippet, or pick a node below, to connect it to others.	Aggiungi un estratto, o scegli un nodo qui sotto, per collegarlo ad altri.
+	On the map from this page	Sulla mappa da questa pagina
+	Nothing yet.	Ancora niente.
+	Stop connecting this node	Smetti di collegare questo nodo
+	Go to the source	Vai alla fonte
+	Find a node to connect to	Cerca un nodo da collegare
+	Connect to: {node}	Collega a: {node}
+	Nothing else on the map yet.	Sulla mappa non c'è ancora altro.
+	No node has those words.	Nessun nodo contiene quelle parole.
+	Add selection to map	Aggiungi la selezione alla mappa
+	Claude Code isn't installed on this computer.	Claude Code non è installato su questo computer.
+	{tokens} tokens · on your Claude plan	{tokens} token · sul tuo piano Claude
+	Your question, and the text from this document and your library that it is about, will be sent to Anthropic through Claude Code on this computer, to answer it with {model}. Requests count against your Claude plan.	La tua domanda, insieme al testo di questo documento e della tua biblioteca a cui si riferisce, verrà inviata ad Anthropic tramite Claude Code su questo computer, per ottenere una risposta da {model}. Le richieste contano sui limiti del tuo piano Claude.
+	Claude Code didn't answer.	Claude Code non ha risposto.
+	Connect with	Collegati con
+	An Anthropic API key	Una chiave API di Anthropic
+	Claude Code, with your Claude subscription (personal use)	Claude Code, con il tuo abbonamento Claude (uso personale)
+	Claude Code isn't installed on this computer. Install it from claude.com/claude-code, sign in to it, then restart PdfCraft.	Claude Code non è installato su questo computer. Installalo da claude.com/claude-code, accedi, poi riavvia PdfCraft.
+	Claude Code	Claude Code
+	Signed in to your Claude account ({email}).	Accesso effettuato al tuo account Claude ({email}).
+	Signed in to your Claude account.	Accesso effettuato al tuo account Claude.
+	Signed in with {method}, not a Claude subscription: requests go on that account.	Accesso effettuato con {method}, non con un abbonamento Claude: le richieste vanno su quell'account.
+	Check sign-in	Verifica l'accesso
+	Copy the sign-in command	Copia il comando di accesso
+	To sign in, paste the command into Terminal and follow it in your browser. Web search isn't available this way.	Per accedere, incolla il comando nel Terminale e segui i passaggi nel browser. In questo modo la ricerca web non è disponibile.
+	For your own use: Anthropic asks apps to use API keys, and lets you sign in to the unmodified Claude Code program with your own subscription. PdfCraft runs that program, with its tools and add-ons turned off, and never reads its sign-in.	Solo per uso personale: Anthropic chiede alle app di usare le chiavi API e ti consente di accedere al programma Claude Code originale con il tuo abbonamento. PdfCraft avvia quel programma, con strumenti ed estensioni disattivati, e non legge mai le sue credenziali.
+	Sign-in command copied	Comando di accesso copiato
+	A name can't contain {c}.	Un nome non può contenere {c}.
+	Couldn't make the folder: {e}	Impossibile creare la cartella: {e}
+	Couldn't open this folder: {e}	Impossibile aprire questa cartella: {e}
+	Folder name	Nome della cartella
+	Google Drive	Google Drive
+	Google Drive for desktop isn't set up on this computer. Install it and sign in to your Google account; its folders then show here, and what you save in them is uploaded.	Google Drive per desktop non è configurato su questo computer. Installalo e accedi con il tuo account Google: le sue cartelle compariranno qui e ciò che salvi al loro interno verrà caricato.
+	Loading…	Caricamento…
+	New folder	Nuova cartella
+	No folders here	Nessuna cartella qui
+	Other location…	Altra posizione…
+	PdfCraft isn't allowed to open this Drive yet. Allow it when macOS asks, or in System Settings > Privacy & Security > Files and Folders; or use Other location… to choose the folder in the system's dialog.	PdfCraft non ha ancora il permesso di aprire questo Drive. Consentilo quando macOS lo chiede, oppure in Impostazioni di Sistema > Privacy e sicurezza > File e cartelle; o usa Altra posizione… per scegliere la cartella nella finestra di sistema.
+	Save to Google Drive	Salva su Google Drive
+	That name can't be used for a file in Drive.	Questo nome non si può usare per un file su Drive.
+	That name is too long.	Questo nome è troppo lungo.
+	There is already a folder with that name.	Esiste già una cartella con questo nome.
+	This folder isn't there any more.	Questa cartella non esiste più.
+	Try again	Riprova
+	Type a name.	Scrivi un nome.
+	couldn't start listing the folder	impossibile avviare l'elenco della cartella
+	listing stopped unexpectedly	l'elenco si è interrotto inaspettatamente
+	{name} is already in this folder. Replace it?	{name} è già in questa cartella. Vuoi sostituirlo?
+	Save to Google Drive…	Salva su Google Drive…
+	Saving to Google Drive needs the desktop app, with Google Drive for desktop.	Il salvataggio su Google Drive richiede l'app desktop e Google Drive per desktop.
+	Snippets	Snippet
+	Related	Collegata a
+	Reading the wiki stopped unexpectedly.	La lettura del wiki si è interrotta inaspettatamente.
+	not a page's file name	non è il nome di file di una pagina
+	a file of that name is already there	c'è già un file con quel nome
+	PdfCraft keeps this page up to date; changes made here are replaced.	PdfCraft tiene aggiornata questa pagina; le modifiche fatte qui vengono sostituite.
+	Log	Registro
+	new page	nuova pagina
+	changed	modificata
+	snippet added	snippet aggiunto
+	assistant's changes	modifiche dell'assistente
+	Choose the wiki's folder	Scegli la cartella del wiki
+	Change…	Cambia…
+	The wiki's folder couldn't be read: {e}	Impossibile leggere la cartella del wiki: {e}
+	Reading the wiki…	Lettura del wiki…
+	Your wiki is a folder of Markdown pages, one per topic, with snippets from your PDFs and links between pages. The AI assistant reads it when it answers, and proposes what to add; you choose what is kept.	Il tuo wiki è una cartella di pagine Markdown, una per argomento, con snippet dai tuoi PDF e collegamenti tra le pagine. L'assistente IA lo legge quando risponde e propone cosa aggiungere; sei tu a scegliere cosa tenere.
+	Keep it on Google Drive	Tienilo su Google Drive
+	Choose a folder…	Scegli una cartella…
+	Keep it on this computer	Tienilo su questo computer
+	Other editors, such as Obsidian, can open the same folder.	Anche altri editor, come Obsidian, possono aprire la stessa cartella.
+	Find a page	Trova una pagina
+	Add the selection to a page	Aggiungi la selezione a una pagina
+	No pages yet. Add a selection, or ask the assistant to start from the page you are reading.	Ancora nessuna pagina. Aggiungi una selezione, oppure chiedi all'assistente di partire dalla pagina che stai leggendo.
+	Find a page, or type a new one's title	Trova una pagina, o scrivi il titolo di una nuova
+	New page “{title}”	Nuova pagina «{title}»
+	Type the new page's title.	Scrivi il titolo della nuova pagina.
+	< All pages	< Tutte le pagine
+	This page is too large to show here.	Questa pagina è troppo grande per essere mostrata qui.
+	Linked from	Collegata da
+	{title}, page {n}	{title}, pagina {n}
+	Open the document at this page	Apri il documento a questa pagina
+	The assistant proposes	L'assistente propone
+	Apply {n}	Applica {n}
+	New page “{page}”: {text}	Nuova pagina «{page}»: {text}
+	On “{page}”, quote {source}: “{quote}”	Su «{page}», cita {source}: «{quote}»
+	Link “{page}” to “{to}”	Collega «{page}» a «{to}»
+	On “{page}”, add: {text}	Su «{page}», aggiungi: {text}
+	On “{page}”, replace “{old}” with “{new}”	Su «{page}», sostituisci «{old}» con «{new}»
+	The assistant is working on the wiki…	L'assistente sta lavorando sul wiki…
+	Ask the assistant to update the wiki	Chiedi all'assistente di aggiornare il wiki
+	From this page	Da questa pagina
+	Check the wiki	Controlla il wiki
+	Undo last changes	Annulla le ultime modifiche
+	Answers read the wiki's pages about the question	Le risposte leggono le pagine del wiki pertinenti alla domanda
+	The wiki's folder isn't chosen yet (the Wiki panel offers where to keep it).	La cartella del wiki non è ancora scelta (il pannello Wiki propone dove tenerla).
+	Wiki folder: {path}	Cartella del wiki: {path}
+	Save to wiki	Salva nel wiki
+	The assistant proposes where the answer goes in your wiki	L'assistente propone dove mettere la risposta nel tuo wiki
+	Your wiki	Il tuo wiki
+	your wiki	il tuo wiki
+	Add selection to wiki	Aggiungi la selezione al wiki
+	Wiki	Wiki
+	Added to the wiki page “{page}”	Aggiunto alla pagina del wiki «{page}»
+	Choose where to keep the wiki first.	Prima scegli dove tenere il wiki.
+	Couldn't read the wiki: {e}	Impossibile leggere il wiki: {e}
+	Couldn't use that folder for the wiki: {e}	Impossibile usare quella cartella per il wiki: {e}
+	Google Drive couldn't be read; choose the folder yourself.	Impossibile leggere Google Drive; scegli tu la cartella.
+	Google Drive for desktop isn't set up on this computer.	Google Drive per desktop non è configurato su questo computer.
+	My Drive wasn't found in Google Drive; choose the folder yourself.	Il mio Drive non è stato trovato in Google Drive; scegli tu la cartella.
+	PdfCraft isn't allowed to open Google Drive yet. Allow it when macOS asks, or choose the folder yourself.	PdfCraft non ha ancora il permesso di aprire Google Drive. Consentilo quando macOS lo chiede, oppure scegli tu la cartella.
+	That document isn't open, and the wiki doesn't say where it is.	Quel documento non è aperto e il wiki non dice dove si trova.
+	That wiki page isn't there any more.	Quella pagina del wiki non esiste più.
+	The assistant proposed no changes to the wiki.	L'assistente non ha proposto modifiche al wiki.
+	The assistant proposed no changes to the wiki: {why}	L'assistente non ha proposto modifiche al wiki: {why}
+	The wiki is still being read; try again in a moment.	Il wiki è ancora in lettura; riprova tra un momento.
+	The wiki needs the desktop app	Il wiki richiede l'app desktop
+	The wiki's last changes were undone.	Le ultime modifiche al wiki sono state annullate.
+	There is no wiki page “{page}” yet.	Non c'è ancora una pagina del wiki «{page}».
+	{n} changes couldn't be made: {first}	{n} modifiche non sono state fatte: {first}
+	{n} changes made to the wiki	{n} modifiche fatte al wiki
+	{n} pages changed since, so they were left as they are.	{n} pagine sono cambiate nel frattempo, quindi sono state lasciate com'erano.
+	Add a snippet to start the map.	Aggiungi un estratto per iniziare la mappa.
+	Click a node to go to its passage.	Fai clic su un nodo per andare al suo passaggio.
+	Concept	Concetto
+	Drag to move the graph, pinch or Ctrl-scroll to zoom, double-click to fit it again	Trascina per spostare il grafo, avvicina le dita o usa Ctrl+rotella per lo zoom, doppio clic per adattarlo di nuovo
+	Map graph	Grafo della mappa
+	Picture	Immagine
+	Snippet	Estratto
+	Close this window; the map stays beside the document	Chiudi questa finestra; la mappa resta accanto al documento
+	Concept map in a window	Mappa concettuale in una finestra
+	Concept map: {map}	Mappa concettuale: {map}
+	Connect: {kind}, {strength}	Collega: {kind}, {strength}
+	Fit the graph	Adatta il grafo
+	Go to the map's graph	Vai al grafo della mappa
+	K and 1, 2, 3 change them while the graph has the keyboard	K e 1, 2, 3 li cambiano mentre il grafo ha la tastiera
+	Map graph in its window	Grafo della mappa nella sua finestra
+	New connections: {kind}, {strength}	Nuovi collegamenti: {kind}, {strength}
+	Open the map in its own window, to put it on another screen	Apri la mappa in una finestra sua, da mettere su un altro schermo
+	Page {n} of {doc}, rendered	Pagina {n} di {doc}, renderizzata
+	Pick a node to see its connections and connect it to others.	Scegli un nodo per vederne i collegamenti e collegarlo ad altri.
+	Rendering the page…	Rendering della pagina…
+	That page isn't in the document any more.	Quella pagina non è più nel documento.
+	The map is open in its own window; bring it back	La mappa è aperta in una finestra sua; riportala qui
+	{n} nodes	{n} nodi
+	Click	Clic
+	Go to the node's passage	Vai al passaggio del nodo
+	Drag	Trascina
+	Move the node	Sposta il nodo
+	{shift}-drag	{shift}+trascina
+	Connect it to the node it is dropped on	Collegalo al nodo su cui lo lasci
+	Give the graph the keyboard	Dai la tastiera al grafo
+	Move between nodes	Passa da un nodo all'altro
+	Go to the passage	Vai al passaggio
+	C, then {enter}	C, poi {enter}
+	Connect the node to the one moved to	Collega il nodo a quello su cui ti sposti
+	Weak, medium, strong connections	Collegamenti deboli, medi, forti
+	Next kind of connection	Tipo di collegamento successivo
+	Keep the preview open	Tieni aperta l'anteprima
+	Zoom in, zoom out, fit	Ingrandisci, riduci, adatta
+	Cancel, then let go of the graph	Annulla, poi lascia il grafo
+	Graph shortcuts	Scorciatoie del grafo
+	The whole map	La mappa intera
+	Scroll to zoom · drag the board to move it · double-click to fit	Rotella per lo zoom · trascina la lavagna per spostarla · doppio clic per adattarla
+	Fit the map	Adatta la mappa
+	Hide the side panel	Nascondi il pannello laterale
+	Show the side panel	Mostra il pannello laterale
+	Edit what the node says	Modifica ciò che dice il nodo
+	Remove the node and its connections (Undo brings it back)	Rimuovi il nodo e i suoi collegamenti (Annulla lo riporta)
+	Edit {kind}	Modifica {kind}
+	Its name	Il suo nome
+	What the picture shows	Cosa mostra l'immagine
+	Its text	Il suo testo
+	{save} saves · {esc} cancels	{save} salva · {esc} annulla
+	Edit the node	Modifica il nodo
+	Remove the node (Undo brings it back)	Rimuovi il nodo (Annulla lo riporta)
+	Right-click	Clic destro
+	Edit, open or remove the node	Modifica, apri o rimuovi il nodo
+	Edit node	Modifica del nodo
