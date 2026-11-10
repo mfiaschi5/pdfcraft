@@ -826,6 +826,9 @@ impl PdfCraftApp {
         });
         // The map in its own window (another screen), drawn once the main window's content is.
         map_ui::show_window(self, &ctx);
+        // Every view of the map has run its actions: a passage marked for a node no longer picked,
+        // or picked in a view now closed, goes.
+        self.sync_node_mark();
         self.process_pending_edits();
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);
