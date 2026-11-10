@@ -80,6 +80,7 @@ const PANELS: &[(RightPanel, &str, &str)] = &[
     (RightPanel::Assistant, "assistant", "AI assistant"),
     (RightPanel::Map, "map", "Concept map"),
     (RightPanel::Wiki, "wiki", "Wiki"),
+    (RightPanel::Drive, "drive", "Google Drive"),
 ];
 
 /// The English titles of the menus and submenus, for the bar's mnemonics in languages whose
@@ -112,6 +113,7 @@ const SEP: &str = "---";
 const FILE: &[&str] = &[
     "create.blank",
     "file.open",
+    "file.open_from_drive",
     "file.open_recent",
     "file.pin_folder",
     SEP,

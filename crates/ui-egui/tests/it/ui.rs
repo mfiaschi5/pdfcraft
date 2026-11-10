@@ -1791,7 +1791,9 @@ fn short_window_rail_buttons_scroll_clear_of_page_navigation() {
         let dock = rail(&h, dock_label);
         assert!(dock.top() >= page.bottom() && dock.bottom() <= height, "dock button {dock:?} stays below navigation and inside the window");
         assert!(rail(&h, "Comments").bottom() <= page.top(), "the first button sits above the page field");
-        assert!(rail(&h, "Tags").top() >= page.top(), "the window is short enough that the buttons must scroll");
+        // The rail's last button: this fork's Google Drive, after Tags and Wiki.
+        let last = "Google Drive";
+        assert!(rail(&h, last).top() >= page.top(), "the window is short enough that the buttons must scroll");
         let first = rail(&h, "Comments");
         let over = first.center();
         h.event(egui::Event::PointerMoved(over));
@@ -1805,9 +1807,9 @@ fn short_window_rail_buttons_scroll_clear_of_page_navigation() {
             });
             h.run_steps(4);
         }
-        let tags = rail(&h, "Tags");
-        assert!(tags.top() >= first.top(), "Tags {tags:?} is fully visible in the scrolling area");
-        assert!(tags.bottom() <= page.top(), "Tags {tags:?} scrolls into view above the page field {page:?}");
+        let tags = rail(&h, last);
+        assert!(tags.top() >= first.top(), "{last} {tags:?} is fully visible in the scrolling area");
+        assert!(tags.bottom() <= page.top(), "{last} {tags:?} scrolls into view above the page field {page:?}");
         assert_eq!(h.get(By::new().role(egui::accesskit::Role::TextInput).value("1")).rect(), page, "navigation stays put");
     }
 }

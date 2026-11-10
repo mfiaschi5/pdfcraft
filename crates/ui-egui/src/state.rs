@@ -58,6 +58,8 @@ pub enum RightPanel {
     Map,
     /// The wiki beside the document: pages of notes with snippets, kept in a folder.
     Wiki,
+    /// Google Drive beside the document: the folder it is in, its folders and PDFs (desktop only).
+    Drive,
 }
 
 /// Quick-action bar tools (the vertical floating strip).
@@ -198,6 +200,8 @@ pub enum Dialog {
     PinTool,
     /// File ▸ Save to Google Drive (desktop only).
     SaveToDrive,
+    /// File ▸ Open from Google Drive (desktop only).
+    OpenFromDrive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

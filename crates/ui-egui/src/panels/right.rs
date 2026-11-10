@@ -25,9 +25,17 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let mut assistant_action: Option<crate::assistant_ui::PanelAction> = None;
     let mut map_actions: Vec<crate::map_ui::Action> = Vec::new();
     let mut wiki_actions: Vec<crate::wiki_ui::Action> = Vec::new();
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut drive_actions: Vec<crate::drive_ui::Action> = Vec::new();
     if panel == RightPanel::Wiki {
         app.ensure_wiki();
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    let drive_here = (panel == RightPanel::Drive).then(|| {
+        app.ensure_drive_panel();
+        app.drive_here(id)
+    });
+    let ctx = app.ctx.clone();
     #[cfg(not(target_arch = "wasm32"))]
     let drive = {
         let home = app.drive.home.clone();
@@ -66,6 +74,8 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         let assistant = &mut app.assistant;
         let maps = &mut app.maps;
         let wiki = &mut app.wiki;
+        #[cfg(not(target_arch = "wasm32"))]
+        let drive_state = &mut app.drive;
         let comment_allowed = doc.allows_annotation();
         // A dialog or the palette owns the keyboard: the panel leaves Escape to it.
         let modal = app.dialog.is_some() || app.palette_open;
@@ -89,6 +99,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     RightPanel::Assistant => ("AI assistant", None),
                     RightPanel::Map => ("Concept map", Some(maps.graph.nodes().len())),
                     RightPanel::Wiki => ("Wiki", wiki.wiki.as_ref().map(|w| w.pages.len())),
+                    RightPanel::Drive => ("Google Drive", None),
                 };
                 // Comments count like Acrobat (no replies); the replies go in small text below.
                 let replies = if panel == RightPanel::Comments { crate::comments_panel::reply_count(info) } else { 0 };
@@ -321,6 +332,17 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         map_actions = crate::map_ui::panel(ui, &t, maps, &here, graph_doc);
                     }
                     RightPanel::Wiki => wiki_actions = crate::wiki_ui::panel(ui, &t, wiki, &wiki_here),
+                    #[cfg(not(target_arch = "wasm32"))]
+                    RightPanel::Drive => {
+                        if let Some(here) = &drive_here {
+                            drive_actions = crate::drive_ui::panel(ui, &t, drive_state, here, ctx.as_ref());
+                        }
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    RightPanel::Drive => {
+                        let _ = &ctx;
+                        ui.label(tl!("Google Drive needs the desktop app, with Google Drive for desktop."));
+                    }
                     RightPanel::Attachments => {
                         let attachable = doc.allows_modification() && doc.read_only_reason.is_none();
                         if attachable {
@@ -444,6 +466,8 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     }
     crate::map_ui::run_panel(app, map_actions);
     crate::wiki_ui::run_panel(app, wiki_actions);
+    #[cfg(not(target_arch = "wasm32"))]
+    crate::drive_ui::run_panel(app, drive_actions);
     match sig_action {
         Some(crate::sign_ui::PanelAction::Validate) => app.run_command("sign.validate"),
         Some(crate::sign_ui::PanelAction::GoTo(p)) => app.views[index].go_to_page(p),

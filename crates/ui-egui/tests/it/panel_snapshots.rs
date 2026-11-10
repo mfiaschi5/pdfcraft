@@ -164,7 +164,7 @@ fn check(h: &Harness<'static, PdfCraftApp>, name: &str) -> Result<(), String> {
 }
 
 /// Every panel, in the order of the rail.
-const ALL: [RightPanel; 14] = [
+const ALL: [RightPanel; 15] = [
     RightPanel::Comments,
     RightPanel::Bookmarks,
     RightPanel::Pages,
@@ -179,6 +179,7 @@ const ALL: [RightPanel; 14] = [
     RightPanel::Assistant,
     RightPanel::Map,
     RightPanel::Wiki,
+    RightPanel::Drive,
 ];
 
 /// Opens `p` with something in it and names its snapshot. No wildcard on purpose: a new
@@ -199,6 +200,8 @@ fn open(p: RightPanel) -> (Harness<'static, PdfCraftApp>, &'static str) {
         RightPanel::Map => "map",
         // No folder chosen in tests: the panel offers where to keep it (tests/it/wiki.rs drives it).
         RightPanel::Wiki => "wiki",
+        // No Google Drive for desktop in tests: the panel says how to set it up (tests/it/drive.rs drives it).
+        RightPanel::Drive => "drive",
         RightPanel::Accessibility => {
             let mut h = harness("none");
             assert!(h.state_mut().execute("a11y.check"));

@@ -705,7 +705,7 @@ impl PdfCraftApp {
 
     /// The File ▸ Open picker: PDFs, and images and text that become PDFs.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(super) fn open_picker() -> rfd::AsyncFileDialog {
+    pub(crate) fn open_picker() -> rfd::AsyncFileDialog {
         rfd::AsyncFileDialog::new()
             .add_filter_any_case("PDF", &["pdf"])
             .add_filter_any_case(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE)

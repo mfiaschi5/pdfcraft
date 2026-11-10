@@ -190,6 +190,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("file.save", "Save", FILE, Some(Shortcut::cmd("S")), Document, "save"),
     c("file.save_as", "Save as…", FILE, Some(Shortcut::cmd_shift("S")), Document, "save"),
     c("file.save_to_drive", "Save to Google Drive…", FILE, None, Document, "cloud-upload"),
+    c("file.open_from_drive", "Open from Google Drive…", FILE, None, Nothing, "cloud"),
     c("file.close", "Close file", FILE, Some(Shortcut::cmd("W")), Document, "x"),
     c("file.close_all", "Close all", FILE, Some(Shortcut::cmd_shift("W")), Document, "x"),
     c("file.revert", "Revert", FILE, None, Undo, "rotate-ccw"),

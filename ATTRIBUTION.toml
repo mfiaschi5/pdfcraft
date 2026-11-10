@@ -12,14 +12,14 @@
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/fork/it.tsv"
-title = "Italian interface rows of this fork (AI assistant and concept maps)"
+title = "Italian interface rows of this fork (AI assistant, concept maps, wiki and Google Drive)"
 author = "PdfCraft fork contributors"
 source = "Contributor-original: clean-room, AI-assisted translations of this fork's English UI labels, not separately native-reviewed; no proprietary localisation resources"
 licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Italian UI strings that craft-i18n lacks, added to its Italian PdfCraft catalog by crates/ui-egui/build.rs"
-sha256 = "71c38c05b1c63b348346cac75ab41f90aace27f0d00b93dccc8a7f136f7ff5dc"
+sha256 = "121e64e45071a03e1ce627c440f7e7168a35a2af337ff5bf50c1821efa9d3aaf"
 
 [[asset]]
 path = "docs/images/pdfcraft-ocr-verify.png"

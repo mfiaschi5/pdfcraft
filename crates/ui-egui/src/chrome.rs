@@ -598,6 +598,8 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     // The wiki is a folder of files: the desktop app's.
     if !cfg!(target_arch = "wasm32") {
         items.push(item(RightPanel::Wiki, "book-open", "Wiki", None));
+        // Google Drive for desktop's folders: the desktop app's too.
+        items.push(item(RightPanel::Drive, "cloud", "Google Drive", None));
     }
     let view = &mut app.views[index];
     let mut page_display = None;
