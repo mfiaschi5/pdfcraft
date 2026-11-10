@@ -71,7 +71,7 @@ impl DocView {
             (Some(None), None) => None,
             (None, None) => return,
         };
-        let (page, height) = (m.page, self.page_heights.get(m.page).copied());
+        let (page, height) = (m.page, self.page_sizes.get(m.page).map(|&(_, h)| h));
         m.scrolled = true;
         if let (Some(y), Some(h)) = (top, height.filter(|h| *h > 0.0)) {
             // A little above the start, as the find bar does, so the line before shows too.

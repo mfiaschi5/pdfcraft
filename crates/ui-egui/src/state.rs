@@ -117,6 +117,8 @@ pub enum Dialog {
     Split,
     /// Pages ▸ Number pages… (page labels).
     NumberPages,
+    /// Print production ▸ Fix hairlines.
+    FixHairlines,
     /// Organize pages ▸ Page properties (the tab order of the selected pages).
     PageProps,
     /// Protect Using Password.
