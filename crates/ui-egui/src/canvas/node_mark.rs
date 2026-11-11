@@ -1,7 +1,8 @@
 //! A concept-map node's passage, marked on its page: the node's quote found in the page's text
 //! once that is read, shaded line by line, with a marker where it starts and one where it ends.
-//! The view scrolls to its start once it is found. It stays until Escape or another node's; a
-//! picture's or a region's node marks its box instead.
+//! The view scrolls to its start once it is found. It stays while its node is picked in the view
+//! of the map it was picked in (`map_ui::sync_node_mark`), until Escape; a picture's or a region's
+//! node marks its box instead.
 
 use std::ops::Range;
 
@@ -39,6 +40,11 @@ impl DocView {
         let quote: String = quote.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(MAX_QUOTE_CHARS).collect();
         self.go_to_page(page);
         self.node_mark = Some(NodeMark { page, quote, rect, found: None, scrolled: false, since: 0.0 });
+    }
+
+    /// Take the mark away; whether there was one.
+    pub fn clear_passage_mark(&mut self) -> bool {
+        self.node_mark.take().is_some()
     }
 
     /// The marked passage: its page and, once the page's text is read, its glyphs (`None` inside

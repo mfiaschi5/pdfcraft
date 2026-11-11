@@ -643,7 +643,7 @@ fn nodes(
         // A double-click opens a snippet's or picture's source, and edits a note or a concept.
         if response.double_clicked() {
             match &n.anchor {
-                Some(a) => actions.push(Action::OpenSource(a.clone())),
+                Some(_) => actions.push(Action::Reveal(card.id, EditIn::Board)),
                 None => actions.push(Action::Edit(card.id, EditIn::Board)),
             }
         }
@@ -702,7 +702,7 @@ fn card_menu(ui: &mut egui::Ui, t: &Tokens, id: NodeId, anchor: Option<&Anchor>,
     if let Some(a) = anchor {
         let label = crate::i18n::fmt(tl!("Open {source}"), &[("source", &source_label(a))]);
         if ui.add(egui::Button::image_and_text(crate::icons::image("file-text", 14.0, t.icon), label)).clicked() {
-            actions.push(Action::OpenSource(a.clone()));
+            actions.push(Action::Reveal(id, EditIn::Board));
             ui.close();
         }
     }

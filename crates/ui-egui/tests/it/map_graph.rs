@@ -1,8 +1,8 @@
 //! The concept map as a graph in the panel beside the document: round nodes inside the graph's
 //! frame; hovering a node grows its preview; clicking one goes to its passage in the document and
 //! marks it from where it starts to where it ends (found in the page's text even when the quote's
-//! spacing, case or middle words differ), Escape takes the mark away, and a document that has to
-//! open first is marked once it is.
+//! spacing, case or middle words differ) while the node stays picked in an open view of the map,
+//! Escape takes the mark away, and a document that has to open first is marked once it is.
 
 use std::path::PathBuf;
 
@@ -365,19 +365,93 @@ fn clicking_a_node_goes_to_its_passage_and_marks_where_it_starts_and_ends() {
     node(&h, "Non c'è").click();
     support::wait_until(&mut h, "the quote looked for", |app| app.views[0].marked_passage().is_some_and(|(_, found)| found.is_some()));
     assert_eq!(h.state().views[0].marked_passage(), Some((1, Some(None))));
-    // A concept has no passage: it is picked, and the mark stays as it was.
+    // A concept has no passage: it is picked, and the passage before is no longer marked.
     node(&h, "Politica monetaria").click();
     h.run_steps(3);
     assert_eq!(h.state().maps.picked, Some(MapPicked::Node(ids[4])));
-    assert_eq!(h.state().views[0].marked_passage(), Some((1, Some(None))));
-    // Escape takes the mark away.
+    assert!(h.state().views[0].marked_passage().is_none(), "the concept picked leaves no mark of the node before");
+    shot(&mut h, "mark-concept-picked.png");
+    // Escape takes the mark away, with the node still picked beside the document: the first lets
+    // the graph's keyboard go, the next is the page's.
     node(&h, "L'inflazione è scesa").click();
     support::wait_until(&mut h, "marked again", |app| app.views[0].marked_text().is_some());
+    for _ in 0..2 {
+        h.key_press(egui::Key::Escape);
+        h.run_steps(2);
+    }
+    assert_eq!(h.state().maps.picked, Some(MapPicked::Node(ids[1])));
+    assert!(h.state().views[0].marked_passage().is_none());
+}
+
+/// A node's passage stays marked only while the node is picked in the view of the map it was
+/// picked in: picking another node (one in another document too), a connection or nothing takes
+/// it away, as do removing the node and closing the graph beside the document or the map's window.
+#[test]
+fn a_passage_stays_marked_only_while_its_node_is_picked_in_an_open_view_of_the_map() {
+    let (mut h, ids) = harness("a_passage_stays_marked_o", true, None);
+    let marked = |h: &Harness<'static, PdfCraftApp>, view: usize| h.state().views[view].marked_passage().is_some();
+    let mark = |h: &mut Harness<'static, PdfCraftApp>, label: &str| {
+        node(h, label).click();
+        support::wait_until(h, "the passage marked", |app| app.views.iter().any(|v| v.marked_text().is_some()));
+    };
+    // Closing the graph beside the document.
+    mark(&mut h, "L'inflazione è scesa");
+    shot(&mut h, "mark-picked.png");
     h.state_mut().choose_right_panel(None);
     h.run_steps(2);
-    h.key_press(egui::Key::Escape);
+    assert!(!marked(&h, 0), "the graph beside the document closed");
+    shot(&mut h, "mark-graph-closed.png");
+    h.state_mut().choose_right_panel(Some(RightPanel::Map));
+    h.run_steps(3);
+    // Nothing picked: Done stops connecting the node.
+    mark(&mut h, "L'inflazione è scesa");
+    h.get_by_label("Done").click();
     h.run_steps(2);
-    assert!(h.state().views[0].marked_passage().is_none());
+    assert_eq!(h.state().maps.picked, None);
+    assert!(!marked(&h, 0), "nothing picked");
+    // A connection picked.
+    mark(&mut h, "Il calo ha sorpreso");
+    let edge = h.state().maps.graph.edges().first().map(|e| e.id).unwrap();
+    h.state_mut().maps.picked = Some(MapPicked::Edge(edge));
+    h.run_steps(2);
+    assert!(!marked(&h, 0), "a connection picked");
+    // The node removed.
+    mark(&mut h, "Il calo ha sorpreso");
+    h.state_mut().maps.graph.remove_node(ids[2]).unwrap();
+    h.run_steps(2);
+    assert!(!marked(&h, 0), "the node removed");
+    // A node of another document: that document's passage is marked, and this one's isn't.
+    let other = pdfcraft_engine::Session::new().create_from_text("Cambi", "Il cambio con il dollaro resta stabile.").unwrap().to_vec();
+    let sha = pdfcraft_ai::source::Sha256::of(&other).to_hex();
+    h.state_mut().open_bytes("cambi.pdf", None, other).unwrap();
+    let quote = "Il cambio con il dollaro resta stabile.";
+    let added =
+        h.state_mut().maps.graph.add_node(Content::Text { text: "Il cambio".into() }, anchor(&sha, 0, quote, None), [600.0, 120.0], Author::User);
+    assert!(added.is_ok());
+    h.run_steps(4);
+    mark(&mut h, "L'inflazione è scesa");
+    assert!(marked(&h, 0));
+    node(&h, "Il cambio").click();
+    support::wait_until(&mut h, "the other document's passage", |app| app.views[1].marked_text().is_some());
+    assert!(!marked(&h, 0), "the passage of the node picked before, in its own document");
+    // The map's window: a click there marks; closing it takes the mark away, though the graph
+    // beside the document stays.
+    assert!(h.state_mut().execute("map.window"));
+    h.run_steps(4);
+    let frame = h.get_by_label("Map graph in its window").rect();
+    h.get_by(|n| {
+        n.role() == Role::Button
+            && n.label().as_deref() == Some("L'inflazione è scesa")
+            && n.bounding_box().is_some_and(|b| frame.contains(egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32)))
+    })
+    .click();
+    support::wait_until(&mut h, "marked from the window", |app| app.views[0].marked_text().is_some());
+    assert!(!marked(&h, 1));
+    h.get_by_label("Close this window; the map stays beside the document").click();
+    h.run_steps(3);
+    assert!(!h.state().maps.window);
+    assert_eq!(h.state().right, Some(RightPanel::Map));
+    assert!(!marked(&h, 0), "the window it was picked in closed");
 }
 
 #[test]

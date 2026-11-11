@@ -553,7 +553,7 @@ fn keys(ui: &egui::Ui, maps: &mut MapState, host: Host, placed: &Placed, bg: &eg
         match view.connect_from.take() {
             Some(from) if from != cursor => actions.push(Action::Connect(from, cursor)),
             Some(_) => {}
-            None => actions.push(Action::Reveal(cursor)),
+            None => actions.push(Action::Reveal(cursor, host.edit_in())),
         }
     }
     if pressed(Key::Plus) || pressed(Key::Equals) || ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Equals)) {
@@ -702,7 +702,7 @@ fn node_input(
         if let Some(a) = &anchor {
             let label = crate::i18n::fmt(tl!("Open {source}"), &[("source", &source_label(a))]);
             if ui.add(egui::Button::image_and_text(crate::icons::image("file-text", 14.0, ui.visuals().text_color()), label)).clicked() {
-                actions.push(Action::Reveal(id));
+                actions.push(Action::Reveal(id, host.edit_in()));
                 ui.close();
             }
         }
@@ -717,7 +717,7 @@ fn node_input(
     if response.clicked() {
         view.cursor = Some(id);
         view.focus_now = true;
-        actions.push(Action::Reveal(id));
+        actions.push(Action::Reveal(id, host.edit_in()));
     }
     if response.drag_started()
         && let Some(p) = pointer

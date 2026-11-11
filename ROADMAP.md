@@ -240,6 +240,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 ## Progress log
 - **2026-10-13 (M8, redact by regex):** `redact_mark` takes `regex` (caller expression, linear-time engine, length/size/nesting caps, empty-matching refused) with optional `validate` (luhn, mod97, iban). Headless only; issue #1886.
 
+- **2026-11-10 (M13, the passage mark follows the picked node):** A concept-map node's passage stays marked in the document only while that node is picked in the view of the map it was picked in. Picking another node (a concept, a connection or nothing too), removing it, or closing the graph beside the document or the map's window takes the mark away, in every open document. Before, it stayed until Escape or another passage's mark.
+
 - **2026-11-10 (fork, PdfCraft 0.20.0):** The fork is brought up to the upstream 0.20.0 release (`v0.20.0`, 870 upstream commits since 0.19.0), keeping the M13 assistant, concept maps, wiki, Drive and the JPEG 2000 copy.
   - **JPEG 2000 export.** Upstream now reads an image's colour space once, within the export's budget. The fork's JPEG 2000 branch takes that space, unless the image has no /ColorSpace and its own header gives the colours.
   - **Moved code.** The passage mark scrolls by upstream's page sizes (`page_sizes`), which replaced the page heights.

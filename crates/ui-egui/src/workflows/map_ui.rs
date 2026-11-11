@@ -5,7 +5,8 @@
 //! - **Capture.** *Add to map* in the selection bar, *Add Image to Map* in a picture's page menu.
 //!   Snippets follow the assistant's rules: a document that forbids copying gives nothing, and
 //!   text under unapplied redaction marks is left out.
-//! - **Navigate.** A node's source button (or a double-click) opens its document at the page.
+//! - **Navigate.** A node's source button (or a double-click) opens its document at the page, its
+//!   passage marked while the node stays picked in the view of the map it was picked in.
 //!   Selecting a node fades what isn't within two connections of it.
 //! - **Edit.** Drag nodes; drag from a node's dot onto another to connect them with the chosen kind
 //!   and strength. Each change is one undo step. Tidy up, export to JSON Canvas or GraphML.
@@ -109,6 +110,9 @@ pub struct MapState {
     /// A node's passage to mark once its document is open (it was opening when the node was
     /// clicked).
     pending_mark: Option<PendingMark>,
+    /// The node whose passage is marked in the documents, and the view of the map it was picked
+    /// in: the mark stays while the node is picked there ([`PdfCraftApp::sync_node_mark`]).
+    marked: Option<(NodeId, EditIn)>,
     /// The whole map's board: its preview, glides and pictures.
     pub(crate) board: board::Board,
     /// The node whose text is being edited, and where.
@@ -119,7 +123,8 @@ struct PendingMark {
     anchor: Anchor,
 }
 
-/// Where a node is being edited: its editor shows there.
+/// A view of the map: where a node is being edited (its editor shows there), and where a node
+/// was picked to mark its passage.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum EditIn {
     /// The whole map, over the node's card.
@@ -173,6 +178,7 @@ impl Default for MapState {
             window_view: graph_view::GraphView::default(),
             window: false,
             pending_mark: None,
+            marked: None,
             board: board::Board::default(),
             editing: None,
         }
@@ -486,12 +492,52 @@ impl PdfCraftApp {
         }
     }
 
-    /// Go to a node's passage and mark where it starts and ends; a document that has to open
-    /// first is marked once it is.
-    pub(crate) fn reveal_anchor(&mut self, anchor: &Anchor) {
-        self.open_anchor(anchor);
-        self.maps.pending_mark = Some(PendingMark { anchor: anchor.clone() });
+    /// Pick a node and go to its passage, marked where it starts and ends; a document that has to
+    /// open first is marked once it is. The mark of the node picked before goes, in every
+    /// document. `from` is the view of the map it was picked in.
+    pub(crate) fn reveal_node(&mut self, id: NodeId, from: EditIn) {
+        self.maps.picked = Some(Picked::Node(id));
+        self.clear_node_marks();
+        let Some(anchor) = self.maps.graph.node(id).and_then(|n| n.anchor.clone()) else { return };
+        self.open_anchor(&anchor);
+        self.maps.marked = Some((id, from));
+        self.maps.pending_mark = Some(PendingMark { anchor });
         self.apply_pending_mark();
+    }
+
+    /// Take every document's passage mark away, and the one waiting for its document to open.
+    fn clear_node_marks(&mut self) {
+        self.maps.marked = None;
+        self.maps.pending_mark = None;
+        let mut cleared = false;
+        for view in &mut self.views {
+            cleared |= view.clear_passage_mark();
+        }
+        // The page drew it this frame: the next frame draws it gone.
+        if cleared && let Some(ctx) = &self.ctx {
+            ctx.request_repaint();
+        }
+    }
+
+    /// A node's passage stays marked only while the node is picked and the view of the map it was
+    /// picked in is open: the graph beside the document, the map's window, or the whole map (which
+    /// gives way to the document to show the passage). Picking another node, a connection or
+    /// nothing, removing the node, or closing that view takes the mark away. Run once the frame's
+    /// map actions have.
+    pub(crate) fn sync_node_mark(&mut self) {
+        let Some((id, from)) = self.maps.marked else { return };
+        // While its document opens, the panel the document asks for may stand in for the graph
+        // ([`Self::apply_pending_mark`] puts it back).
+        let opening = self.maps.pending_mark.is_some();
+        let open = opening
+            || match from {
+                EditIn::Panel => self.right == Some(crate::RightPanel::Map),
+                EditIn::Window => self.maps.window,
+                EditIn::Board => true,
+            };
+        if !open || self.maps.picked != Some(Picked::Node(id)) || self.maps.graph.node(id).is_none() {
+            self.clear_node_marks();
+        }
     }
 
     /// Mark the pending passage once its document is in a tab.
@@ -505,6 +551,11 @@ impl PdfCraftApp {
         match by_bytes.or_else(by_path) {
             Some(i) => {
                 let Some(PendingMark { anchor }) = self.maps.pending_mark.take() else { return };
+                // A document that opened for it may have asked for another panel (/PageMode): the
+                // graph the node was picked in stays beside it, and so does the mark.
+                if matches!(self.maps.marked, Some((_, EditIn::Panel))) && self.right != Some(crate::RightPanel::Map) {
+                    self.choose_right_panel(Some(crate::RightPanel::Map));
+                }
                 self.active = Some(i);
                 if let Some(view) = self.views.get_mut(i) {
                     view.mark_passage(usize::try_from(anchor.page).unwrap_or(usize::MAX), &anchor.quote, anchor.rect);
@@ -737,7 +788,6 @@ pub(crate) enum Action {
     Connect(NodeId, NodeId),
     Remove(Picked),
     SetEdge(EdgeId, KindId, Strength),
-    OpenSource(Anchor),
     Export(Export),
     Ask,
     StopAsk,
@@ -750,8 +800,9 @@ pub(crate) enum Action {
     OpenWhole,
     /// The panel: add the document's selection.
     AddSelection,
-    /// The panel's graph: pick the node and go to its passage, marked where it starts and ends.
-    Reveal(NodeId),
+    /// Pick the node and go to its passage, marked where it starts and ends while the node stays
+    /// picked in this view of the map.
+    Reveal(NodeId, EditIn),
     /// The map in a window of its own, or not.
     Window(bool),
     /// Edit a node's text, in this view.
@@ -1078,7 +1129,7 @@ fn node_ui(ui: &mut egui::Ui, t: &Tokens, graph: &Graph, id: NodeId, actions: &m
     if let Some(a) = &n.anchor {
         let label = crate::i18n::fmt(tl!("Open {source}"), &[("source", &source_label(a))]);
         if ui.button(label).clicked() {
-            actions.push(Action::OpenSource(a.clone()));
+            actions.push(Action::Reveal(id, EditIn::Board));
         }
     }
     let links = graph.edges().iter().filter(|e| e.from == id || e.to == id).count();
@@ -1284,13 +1335,7 @@ fn run(app: &mut PdfCraftApp, action: Action) {
                 g.set_edge(id, kind, strength, label).map_err(|e| e.to_string())
             });
         }
-        Action::OpenSource(anchor) => app.reveal_anchor(&anchor),
-        Action::Reveal(id) => {
-            app.maps.picked = Some(Picked::Node(id));
-            if let Some(a) = app.maps.graph.node(id).and_then(|n| n.anchor.clone()) {
-                app.reveal_anchor(&a);
-            }
-        }
+        Action::Reveal(id, from) => app.reveal_node(id, from),
         Action::Window(open) => app.set_map_window(open),
         Action::Export(format) => app.export_map(format),
         Action::Ask => app.start_map_edit(),
@@ -1407,7 +1452,7 @@ fn focus_ui(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, id: NodeId, plac
     if let Some(a) = &n.anchor
         && ui.small_button(source_label(a)).on_hover_text(tl!("Go to the source")).clicked()
     {
-        actions.push(Action::OpenSource(a.clone()));
+        actions.push(Action::Reveal(id, place));
     }
     let name = |g: &Graph, other: NodeId| g.node(other).map(|o| capped(o.content.text(), 50)).unwrap_or_default();
     for e in maps.graph.edges().iter().filter(|e| e.from == id || e.to == id) {
@@ -1418,8 +1463,8 @@ fn focus_ui(ui: &mut egui::Ui, t: &Tokens, maps: &mut MapState, id: NodeId, plac
         let response = ui.selectable_label(false, egui::RichText::new(label).small());
         if response.clicked() {
             actions.push(Action::Focus(other));
-            if let Some(a) = maps.graph.node(other).and_then(|o| o.anchor.clone()) {
-                actions.push(Action::OpenSource(a));
+            if maps.graph.node(other).is_some_and(|o| o.anchor.is_some()) {
+                actions.push(Action::Reveal(other, place));
             }
         }
     }
